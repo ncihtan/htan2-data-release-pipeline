@@ -1,0 +1,52 @@
+[
+    {
+        "description": "Self-identifier for this data file - HTAN ID of this file HTAN ID SOP (eg HTANx_yyy_zzz)",
+        "name": "HTAN_Data_File_ID",
+        "type": "STRING"
+    },
+    {
+        "description": "HTAN Data File Identifier indicating the file(s) from which these files were derived",
+        "name": "HTAN_Parent_Data_File_ID",
+        "type": "STRING"
+    },
+    {
+        "description": "Name of a file",
+        "name": "Filename",
+        "type": "STRING"
+    },
+    {
+        "description": "Synapse ID of entity",
+        "name": "entityId",
+        "type": "STRING"
+    },
+    {
+        "description": "Category of metadata (e.g. Diagnosis, Biospecimen, scRNA-seq Level 1, etc.)",
+        "name": "Component",
+        "type": "STRING"
+    },
+    {
+        "description": "Name of HTAN Center e.g. HTAN HTAPP",
+        "name": "HTAN_Center",
+        "type": "STRING"
+    },
+    {
+        "description": "HTAN ID of the biospecimen directly assayed using the experimental platform",
+        "name": "HTAN_Assayed_Biospecimen_ID",
+        "type": "STRING"
+    },
+    {
+        "description": "HTAN ID of the biopsied or resected biospecimen from the patient from which the assay data were derived",
+        "name": "HTAN_Originating_Biospecimen_ID",
+        "type": "STRING"
+    },
+    {
+        "description": "HTAN ID associated with a patient based on HTAN ID SOP (eg HTANx_yyy )",
+        "name": "HTAN_Participant_ID",
+        "type": "STRING"
+    },
+    {
+        "description": "Full Biospecimen ancestry path from HTAN_Assayed_Biospecimen_ID to HTAN_Originating_Biospecimen_ID as comma separated list",
+        "name": "Biospecimen_Path",
+        "type": "STRING"
+    }
+]

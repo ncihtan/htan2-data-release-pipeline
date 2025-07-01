@@ -1,0 +1,125 @@
+
+Validating table CDS_Genomics_v24.8.1.seq.xlsx
+
+    Values not in CDS PV list:
+
+		sample_type: ['Bone Marrow', 'Tissue', 'Analyte', 'Cell', 'Blood', 'Fluid']
+		library_selection: ['Poly-A Enriched Genomic Library']
+		instrument_model: ['Illumina NextSeq', 'Illumina NextSeq 550']
+		primary_diagnosis: ['Familial adenomatous polyposis']
+		tissue_or_organ_of_origin: ['Middle Lobe of lung', 'Lower-inner quadrant of breast', 'Cervix uteri', 'Paraspinal', 'Connective subcutaneous and other soft tissues of head face and neck']
+		site_of_resection_or_biopsy: ['Paraspinal']
+
+    There are 7663 distinct data files in this submission
+
+	participant_id's are present for all rows
+	file_name's are present for all rows
+	HTAN_Data_File_ID's are present for all rows
+
+    All HTAN_Data_File_ID values are unique
+
+    All file_url_in_cds values are unique
+
+    All md5sum values are unique
+
+    There are (97) non-unique file_name values
+		file_name
+		possorted_genome_bam.bam                     69
+		cell_barcodes.MAPQ30.bam                     32
+		27522_4_R1.fastq.gz                           3
+		27522_4_R2.fastq.gz                           3
+		HTA15_100005_007_L002_I1_001.fastq.gz         2
+		HTA15_100005_007_L001_R2_001.fastq.gz         2
+		HTA15_100005_007_L001_R1_001.fastq.gz         2
+		HTA15_100005_007_L001_I1_001.fastq.gz         2
+		HTA15_100004_114_L002_R2_001.fastq.gz         2
+		HTA15_100004_114_L002_R1_001.fastq.gz         2
+		HTA15_100004_114_L002_I1_001.fastq.gz         2
+		HTA15_100004_114_L001_R2_001.fastq.gz         2
+		HTA15_100004_114_L001_R1_001.fastq.gz         2
+		HTA15_100004_114_L001_I1_001.fastq.gz         2
+		HTA15_51703_1503_S2_L002_R2_001.fastq.gz      2
+		HTA15_51703_1503_S2_L002_R1_001.fastq.gz      2
+		HTA15_51703_1503_S2_L002_I1_001.fastq.gz      2
+		HTA15_51703_1503_S2_L001_R2_001.fastq.gz      2
+		HTA15_51703_1503_S2_L001_R1_001.fastq.gz      2
+		HTA15_100005_007_L002_R1_001.fastq.gz         2
+		HTA15_51703_1503_S2_L001_I1_001.fastq.gz      2
+		HTA15_51430_1503_S1_L002_R2_001.fastq.gz      2
+		HTA15_51430_1503_S1_L002_R1_001.fastq.gz      2
+		HTA15_51430_1503_S1_L002_I1_001.fastq.gz      2
+		HTA15_51430_1503_S1_L001_R2_001.fastq.gz      2
+		HTA15_51430_1503_S1_L001_R1_001.fastq.gz      2
+		HTA15_51430_1503_S1_L001_I1_001.fastq.gz      2
+		HTA15_12342_1203_S3_L002_R2_001.fastq.gz      2
+		HTA15_12342_1203_S3_L002_R1_001.fastq.gz      2
+		HTA15_12342_1203_S3_L002_I1_001.fastq.gz      2
+		HTA15_12342_1203_S3_L001_R2_001.fastq.gz      2
+		HTA15_12342_1203_S3_L001_R1_001.fastq.gz      2
+		HTA15_12342_1203_S3_L001_I1_001.fastq.gz      2
+		HTA15_12254_1203_S4_L002_R2_001.fastq.gz      2
+		HTA15_12254_1203_S4_L002_R1_001.fastq.gz      2
+		HTA15_12254_1203_S4_L002_I1_001.fastq.gz      2
+		HTA15_12254_1203_S4_L001_R2_001.fastq.gz      2
+		HTA15_12254_1203_S4_L001_R1_001.fastq.gz      2
+		HTA15_12254_1203_S4_L001_I1_001.fastq.gz      2
+		F088B.sorted.ir.br.rmDup.md.bam               2
+		F074B.sorted.ir.br.rmDup.md.bam               2
+		81012_1_R2.fastq.gz                           2
+		60359_1_R2.fastq.gz                           2
+		59114_4_R2.fastq.gz                           2
+		58408_2_R2.fastq.gz                           2
+		58408_1_R2.fastq.gz                           2
+		57075_3_R2.fastq.gz                           2
+		56203_2_R2.fastq.gz                           2
+		47491_2_R2.fastq.gz                           2
+		47491_1_R2.fastq.gz                           2
+		37692_2_R2.fastq.gz                           2
+		81012_1_R1.fastq.gz                           2
+		60359_1_R1.fastq.gz                           2
+		59114_4_R1.fastq.gz                           2
+		58408_2_R1.fastq.gz                           2
+		58408_1_R1.fastq.gz                           2
+		57075_3_R1.fastq.gz                           2
+		56203_2_R1.fastq.gz                           2
+		47491_2_R1.fastq.gz                           2
+		47491_1_R1.fastq.gz                           2
+		37692_2_R1.fastq.gz                           2
+		NB_7767_825_REG2_S2_L004_R1_001.fastq.gz      2
+		NB_7767_825_REG2_S2_L003_R1_001.fastq.gz      2
+		NB_7767_825_REG2_S2_L002_R1_001.fastq.gz      2
+		NB_7767_825_REG2_S2_L001_R1_001.fastq.gz      2
+		NB_7767_3452_REG1_S7_L004_R2_001.fastq.gz     2
+		NB_7767_3452_REG1_S7_L003_R2_001.fastq.gz     2
+		NB_7767_3452_REG1_S7_L002_R1_001.fastq.gz     2
+		NB_7767_3452_REG1_S7_L001_R1_001.fastq.gz     2
+		NB_7767_3447_REG1_S3_L004_R1_001.fastq.gz     2
+		NB_7767_3447_REG1_S3_L003_R1_001.fastq.gz     2
+		NB_7767_3447_REG1_S3_L001_R2_001.fastq.gz     2
+		NB_7767_3092_REG1_S8_L002_R1_001.fastq.gz     2
+		NB_7767_3092_REG1_S8_L001_R1_001.fastq.gz     2
+		NB_7767_3058_REG1_S8_L002_R1_001.fastq.gz     2
+		NB_7767_3058_REG1_S8_L001_R1_001.fastq.gz     2
+		NB_7767_3051_REG2_S7_L001_R2_001.fastq.gz     2
+		NB_7767_825_REG2_S2_L004_R2_001.fastq.gz      2
+		NB_7767_825_REG2_S2_L003_R2_001.fastq.gz      2
+		NB_7767_825_REG2_S2_L002_R2_001.fastq.gz      2
+		NB_7767_825_REG2_S2_L001_R2_001.fastq.gz      2
+		NB_7767_3452_REG1_S7_L004_R1_001.fastq.gz     2
+		NB_7767_3452_REG1_S7_L003_R1_001.fastq.gz     2
+		NB_7767_3452_REG1_S7_L002_R2_001.fastq.gz     2
+		NB_7767_3452_REG1_S7_L001_R2_001.fastq.gz     2
+		NB_7767_3447_REG1_S3_L004_R2_001.fastq.gz     2
+		NB_7767_3447_REG1_S3_L003_R2_001.fastq.gz     2
+		NB_7767_3447_REG1_S3_L002_R2_001.fastq.gz     2
+		NB_7767_3447_REG1_S3_L002_R1_001.fastq.gz     2
+		NB_7767_3447_REG1_S3_L001_R1_001.fastq.gz     2
+		NB_7767_3092_REG1_S8_L002_R2_001.fastq.gz     2
+		NB_7767_3092_REG1_S8_L001_R2_001.fastq.gz     2
+		NB_7767_3058_REG1_S8_L002_R2_001.fastq.gz     2
+		NB_7767_3058_REG1_S8_L001_R2_001.fastq.gz     2
+		NB_7767_3051_REG2_S7_L002_R2_001.fastq.gz     2
+		NB_7767_3051_REG2_S7_L002_R1_001.fastq.gz     2
+		NB_7767_3051_REG2_S7_L001_R1_001.fastq.gz     2
+
+    All file names pass regex check
