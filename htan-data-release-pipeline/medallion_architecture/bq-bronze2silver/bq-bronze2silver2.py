@@ -29,7 +29,7 @@ def init_synapse_client(auth_token: str):
     """
     syn = synapseclient.Synapse()
     try:
-       syn.login(authToken='***REMOVED***')
+       syn.login()
     except synapseclient.core.exceptions.SynapseNoCredentialsError:
         print("Please fill in 'username' and 'password'/'api_key' values in .synapseConfig.")
     except synapseclient.core.exceptions.SynapseAuthenticationError:
@@ -71,10 +71,10 @@ def get_parent_ids(meta_map):
 # ================================ #
 # Configs
 # ================================ #
-with open('./config.yaml', 'r') as file:
+with open('medallion_architecture/bq-bronze2silver/config.yaml', 'r') as file:
       config_yaml = yaml.safe_load(file)
 
-with open('config.json', 'r') as file:
+with open('medallion_architecture/bq-bronze2silver/config.json', 'r') as file:
     config_json = json.load(file)
         
 # environment variables

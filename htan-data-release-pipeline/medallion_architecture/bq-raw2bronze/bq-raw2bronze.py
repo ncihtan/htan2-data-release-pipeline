@@ -25,7 +25,7 @@ except synapseclient.core.exceptions.SynapseAuthenticationError:
       print("Please make sure the credentials in the .synapseConfig file are correct.")
 
 
-with open('config.json', 'r') as file:
+with open('medallion_architecture/bq-raw2bronze/config.json', 'r') as file:
     config_file = json.load(file)
 
 # environment variables

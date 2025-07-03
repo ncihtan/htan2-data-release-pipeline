@@ -25,17 +25,15 @@ from workflow_functions.bq_load import load_bq as load_bq2
 syn = synapseclient.Synapse()
 
 try:
-       syn.login(authToken='***REMOVED***')
-except synapseclient.core.exceptions.SynapseNoCredentialsError:
-      print("Please fill in 'username' and 'password'/'api_key' values in .synapseConfig.")
+    syn.login()
 except synapseclient.core.exceptions.SynapseAuthenticationError:
-      print("Please make sure the credentials in the .synapseConfig file are correct.")
+    print("Please make sure the credentials in the .synapseConfig file are correct.")
 
-with open('./config.yaml', 'r') as file:
-      config_yaml = yaml.safe_load(file)
+with open('medallion_architecture/bq-bronze2silver/config.yaml', 'r') as file:
+    config_yaml = yaml.safe_load(file)
 
 
-with open('config.json', 'r') as file:
+with open('medallion_architecture/bq-bronze2silver/config.json', 'r') as file:
     config_json = json.load(file)
     
     
