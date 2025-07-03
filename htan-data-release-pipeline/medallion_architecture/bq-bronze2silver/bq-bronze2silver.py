@@ -25,17 +25,15 @@ from workflow_functions.bq_load import load_bq as load_bq2
 syn = synapseclient.Synapse()
 
 try:
-       syn.login(authToken='eyJ0eXAiOiJKV1QiLCJraWQiOiJXN05OOldMSlQ6SjVSSzpMN1RMOlQ3TDc6M1ZYNjpKRU9VOjY0NFI6VTNJWDo1S1oyOjdaQ0s6RlBUSCIsImFsZyI6IlJTMjU2In0.eyJhY2Nlc3MiOnsic2NvcGUiOlsidmlldyIsImRvd25sb2FkIiwibW9kaWZ5Il0sIm9pZGNfY2xhaW1zIjp7fX0sInRva2VuX3R5cGUiOiJQRVJTT05BTF9BQ0NFU1NfVE9LRU4iLCJpc3MiOiJodHRwczovL3JlcG8tcHJvZC5wcm9kLnNhZ2ViYXNlLm9yZy9hdXRoL3YxIiwiYXVkIjoiMCIsIm5iZiI6MTcxNTYyNzQxNiwiaWF0IjoxNzE1NjI3NDE2LCJqdGkiOiI3OTg5Iiwic3ViIjoiMzQ0NzA0NiJ9.Rc_WX5DxIdEX5sM0NtZmzSw5O0lamYXXozKC36096ncf4yiPCrddIoNrpxgKDSyPjduIwLR8DMs7_sxzuLjTce2wIA4BW8GVMOiccp4wo0O7v30sGOiCwcW58okMqtjR-JtnROpJ7_4gRMRaKlfjYtZRSHB-OUHBlVCD8unPOYD84CEnwKSQ62OFtZYymT2R3NBTTQ0X3bOkIfCCqwKlrCDwcf_4pJ0bjTQWxlVVidjAzqf3LMg8WLnLLgVbI5qhyLax3JxSE5Z_XFWNK_DkTypZ3HXTScrWTL98WKUtxBMKnz_9Kvg45ayAtJi_hVKStZtt3Zxgxdaxv7hwSjmpuQ')
-except synapseclient.core.exceptions.SynapseNoCredentialsError:
-      print("Please fill in 'username' and 'password'/'api_key' values in .synapseConfig.")
+    syn.login()
 except synapseclient.core.exceptions.SynapseAuthenticationError:
-      print("Please make sure the credentials in the .synapseConfig file are correct.")
+    print("Please make sure the credentials in the .synapseConfig file are correct.")
 
-with open('./config.yaml', 'r') as file:
-      config_yaml = yaml.safe_load(file)
+with open('medallion_architecture/bq-bronze2silver/config.yaml', 'r') as file:
+    config_yaml = yaml.safe_load(file)
 
 
-with open('config.json', 'r') as file:
+with open('medallion_architecture/bq-bronze2silver/config.json', 'r') as file:
     config_json = json.load(file)
     
     
