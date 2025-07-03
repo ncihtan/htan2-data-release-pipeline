@@ -36,7 +36,7 @@ For the complete standard operating procedure (SOP) for releasing HTAN data, ple
 - **Exclude files from final release**
   - HTAN Centers may request specific files or projects be excluded from future data releases. Part of the validation process is pulling the list of files/projects that must be excluded and ensuring they do not appear in the Gold level BigQuery tables. HTAN Centers use this [form]() to submit data exclusions.
 
-**NOTE! This repository does not publish HTAN data on the ISB-CGC and CRDC GC platforms**: The steps for these releases can be found in the [SOP: HTAN ISB-CGC BigQuery Release](https://docs.google.com/document/d/1Kh7Tgor5fxwz1SHcLGTbXENQJW_1Jfml7-hi9jEtMS8/edit?tab=t.0#heading=h.160uf54qkeaf). 
+**NOTE! This repository does not publish HTAN data on the ISB-CGC and CRDC GC platforms**. The steps for these releases can be found in the [SOP: HTAN ISB-CGC BigQuery Release](https://docs.google.com/document/d/1Kh7Tgor5fxwz1SHcLGTbXENQJW_1Jfml7-hi9jEtMS8/edit?tab=t.0#heading=h.160uf54qkeaf). 
 
 <a id="repository-structure"></a>
 ## Repository Structure
@@ -106,7 +106,7 @@ conda deactivate
 ```
 
 #### Pip
-You may also install these packages locally using the [`requirements.txt'](./requirements.txt) file. However, this approach is **not recommended**, as version conflicts with existing packages on your machine may arise.
+You may also install these packages locally using the [`requirements.txt`](./requirements.txt) file. However, this approach is **not recommended**, as version conflicts with existing packages on your machine may arise.
 
 To install the specified packages on your local machine, run the following command:
 ```bash
