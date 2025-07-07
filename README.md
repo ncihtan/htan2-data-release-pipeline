@@ -1,5 +1,7 @@
-<img src="./htan-data-release-pipeline/images/HTAN_banner.jpg"  
-        style="display: block; margin: 0 auto" />
+<p align="center" style="background-color: #040104">
+  <img src="./htan-data-release-pipeline/images/HTAN_banner.jpg" />
+</p>
+
 <a id="introduction"></a>
 ## Introduction
 
