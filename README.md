@@ -1,7 +1,9 @@
+<img src="./htan-data-release-pipeline/images/HTAN_banner.jpg"  
+        style="display: block; margin: 0 auto" />
 <a id="introduction"></a>
 ## Introduction
 
-Timely and reliable data releases are essential to large research initiatives, enabling public access to high-quality datasets that drive scientific discovery. In the Human Tumor Atlas Network (HTAN), data is made available through Sage Bionetwork's [Synapse](https://www.synapse.org/) platform and the National Cancer Institute’s (NCI) Cancer Research Data Commons (CRDC) [General Commons](https://datacommons.cancer.gov/repository/general-commons) (GC). Before releases, datasets undergo validation to ensure quality, consistency, and compliance with standards.
+Timely and reliable data releases are essential to large research initiatives, enabling public aßccess to high-quality datasets that drive scientific discovery. In the Human Tumor Atlas Network (HTAN), data is made available through Sage Bionetwork's [Synapse](https://www.synapse.org/) platform and the National Cancer Institute’s (NCI) Cancer Research Data Commons (CRDC) [General Commons](https://datacommons.cancer.gov/repository/general-commons) (GC). Before releases, datasets undergo validation to ensure quality, consistency, and compliance with standards.
 
 For the complete standard operating procedure (SOP) for releasing HTAN data, please review [SOP: HTAN Phase 2 Data Release](). 
 
