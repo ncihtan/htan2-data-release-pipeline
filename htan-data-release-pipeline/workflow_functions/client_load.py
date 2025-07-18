@@ -7,6 +7,8 @@ Interface with Clients and their Datasets
 Configurations: None
 
 Functions:
+    - init_synapse_client()
+    - init_bq_client()
     - load_bq(client, project, dataset, table, data, schema=None)
     - get_description(attribute, schema, add_descriptions)
     
