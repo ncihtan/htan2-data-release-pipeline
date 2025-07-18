@@ -10,22 +10,23 @@ Medallion Architecture: Bronze to Silver Level
     have their corresponding metadata recorded in a BigQuery table.
 
 Configurations:
+
     This module reads configuration settings from
     'medallion_architecture/bq-bronze2silver/config.yaml'
     and 'medallion_architecture/bq-bronze2silver/config.json'
     for Synapse and BigQuery data retrieval.
 
 Functions:
-    - init_synapse_client()
     - merge_error_data(manifest_data, error_data, column_name)
-    - combine_all_errors(manifest_data, columns)
+    - combine_all_errors(manifest_data, error_df, columns)
     - get_parent_ids(meta_map)
-    - init_bq_client()
+    - get_exclusion_list()
+    - map_metadata(client)
     - main()
     
 Author:       Dar'ya Pozhidayeva <dpozhida@systemsbiology.org>
 Date Created: 12-17-2024
-Date Updated: 07-07-2025
+Date Updated: 07-16-2025
 Modified By:  Yamina Katariya <ykatariy@systemsbiology.org>
 """
 
@@ -33,8 +34,6 @@ import os
 import json
 import pandas as pd
 import yaml
-from google.cloud import bigquery
-import synapseclient
 from workflow_functions.file_validation import (
     htan_id_unique,
     htan_id_regex,
@@ -44,7 +43,10 @@ from workflow_functions.file_validation import (
     unique_demographics,
     parents_exist,
     get_channel_files)
-from workflow_functions.bq_load import load_bq as load_bq_no_schema
+from workflow_functions.client_load import (
+    load_bq,
+    init_synapse_client,
+    init_bq_client)
 
 # ----------------------------------------
 #        MODULE-LEVEL CONFIGURATION
@@ -73,25 +75,6 @@ clinical = config_yaml['clinical_attributes']
 biospecimen = config_yaml['biospecimen_attributes']
 assay_files = config_yaml['files']
 
-def init_synapse_client():
-    """
-    Initializes the Synapse client with the specific user account
-    information.
-
-    Returns:
-        - syn (Synapse instance): Synapse client object
-    """
-
-    syn = synapseclient.Synapse()
-    try:
-        syn.login()
-    except synapseclient.core.exceptions.SynapseNoCredentialsError:
-        print("Please fill in 'username' and 'password'/'api_key' values in .synapseConfig.")
-    except synapseclient.core.exceptions.SynapseAuthenticationError:
-        print("Please make sure the credentials in the .synapseConfig file are correct.")
-
-    return syn
-
 def merge_error_data(manifest_data, error_data, column_name):
     """
     Helper function to merge error data into the manifest.
@@ -111,7 +94,7 @@ def merge_error_data(manifest_data, error_data, column_name):
 
     return pd.merge(manifest_data, error_df, on='entityId', how='left')
 
-def combine_all_errors(manifest_data, columns):
+def combine_all_errors(manifest_data, error_df, columns):
     """
     Helper function to summarize manifest data.
 
@@ -123,8 +106,10 @@ def combine_all_errors(manifest_data, columns):
     Returns:
         - pandas.Dataframe: Filtered manifest dataframe.
     """
+    # pd.concat([silver_manifests_all_errors, manifest_data_all_errors], ignore_index=True)
+    return pd.concat([error_df, manifest_data[columns]], ignore_index=True)
 
-    return manifest_data[columns]
+    #return manifest_data[columns]
 
 def get_parent_ids(meta_map):
     """
@@ -157,13 +142,6 @@ def get_parent_ids(meta_map):
     id_list = id_list.applymap(lambda x: x.strip() if isinstance(x, str) else x).drop_duplicates()
 
     return id_list
-
-def init_bq_client():
-    """
-    Initialize the BigQuery client.
-    """
-
-    return bigquery.Client()
 
 def get_exclusion_list():
     """
@@ -201,8 +179,8 @@ def map_metadata(client):
         manifest_data = client.query(f"""SELECT * FROM `htan-dcc.htan_medallion_bronze.{current_table}`""").result().to_dataframe()
         try:
             component = manifest_data['Component'][0]
-        except:
-            print("Component not found for manifest %s")
+        except KeyError:
+            print(f"Component not found for manifest {current_table}")
             continue
 
         # Create metadata map by merging manifests by component
@@ -219,14 +197,25 @@ def main():
     Main function to process and load Synapse data into BigQuery.
     """
 
+    # ----------------------------------------
+    #        SILVER TABLE DETERMINATION
+    # ----------------------------------------
+
     # Initialize clients
     syn = init_synapse_client()
     client = init_bq_client()
-    id_provenance_bronze = client.query("""SELECT * FROM `htan-dcc.htan_medallion_bronze.bronze_INDEXING_TABLE_Upstream_IDs`""").result().to_dataframe()
+    id_provenance_bronze = client.query(
+        """SELECT *
+        FROM `htan-dcc.htan_medallion_bronze.bronze_INDEXING_TABLE_Upstream_IDs`""") \
+        .result().to_dataframe()
 
     # Get manifest and file exclusion list
     exclusion_list = get_exclusion_list()
-    load_bq_no_schema(client,'htan-dcc', 'htan_medallion_silver','silver_INDEXING_TABLE_ManualExclusionList', exclusion_list)
+    load_bq(client,
+            'htan-dcc',
+            'htan_medallion_silver',
+            'silver_INDEXING_TABLE_ManualExclusionList',
+            exclusion_list)
 
     meta_map = map_metadata(client)
     parent_ids = get_parent_ids(meta_map)
@@ -280,104 +269,151 @@ def main():
                                              'Error_Parent_Not_Found')
 
             # Manual Exclusion List
-            manifest_data = pd.merge(manifest_data, exclusion_list, left_on='entityId', right_on='file_id', how='left')
-            manifest_data = pd.merge(manifest_data, exclusion_list, left_on='Manifest_Id', right_on='manifest_id', how='left')
+            manifest_data = pd.merge(manifest_data, exclusion_list,
+                                     left_on='entityId', right_on='file_id',
+                                     how='left')
+            manifest_data = pd.merge(manifest_data, exclusion_list,
+                                     left_on='Manifest_Id', right_on='manifest_id',
+                                     how='left')
             manifest_data = manifest_data.drop(['file_id_x',
                                                 'manifest_id_x',
                                                 'file_id_y',
                                                 'manifest_id_y'],
                                                 axis=1)
-            manifest_data.rename(columns={'exclusion_reason_x': 'File_Removal_Reason'}, inplace=True)
-            manifest_data.rename(columns={'exclusion_reason_y': 'Manifest_Removal_Reason'}, inplace=True) 
+            manifest_data.rename(columns={'exclusion_reason_x': 'File_Removal_Reason',
+                                          'exclusion_reason_y': 'Manifest_Removal_Reason'},
+                                          inplace=True)
 
             # Summary for file errors
-            manifest_data_all_errors = combine_all_errors(
+            silver_manifests_all_errors = combine_all_errors(
                 manifest_data,
-                ['Filename', 'entityId', 'Manifest_Id', 'Component', 'Manifest_Version', 'HTAN_Center',
-                 'Error_Not_Unique_Demo', 'Error_Not_Unique_Bios', 'Error_Adjacent_Bios',
-                 'Error_Not_Unique_HTAN_ID', 'Error_Ending_Not_Conform_HTAN_Standard', 'Error_Basename_Not_Conform_HTAN_Standard', 'Error_Parent_Not_Found',
-                 'File_Removal_Reason', 'Manifest_Removal_Reason', 'md5', 'BQ_Hash'])
-            silver_manifests_all_errors = pd.concat([silver_manifests_all_errors, manifest_data_all_errors], ignore_index=True)
-    
-            # Imaging-level 2-specific logic
+                silver_manifests_all_errors,
+                ['Filename', 'entityId',
+                 'Manifest_Id', 'Component',
+                 'Manifest_Version', 'HTAN_Center',
+                 'Error_Not_Unique_Demo', 'Error_Not_Unique_Bios',
+                 'Error_Adjacent_Bios', 'Error_Not_Unique_HTAN_ID',
+                 'Error_Ending_Not_Conform_HTAN_Standard',
+                 'Error_Basename_Not_Conform_HTAN_Standard',
+                 'Error_Parent_Not_Found', 'File_Removal_Reason',
+                 'Manifest_Removal_Reason', 'md5', 'BQ_Hash'])
+
+        # Imaging-level 2-specific logic
         if (manifest_data['Component'] == 'ImagingLevel2').all():
-            channel_aux_files, e_missing_channel = get_channel_files(
-                        syn, manifest_data[:5], meta_map['ImagingLevel2'], center_map
-                    )
-            manifest_data = merge_error_data(manifest_data, e_missing_channel, 'Error_Channel_Metadata_Not_Found')
-        
-                    # Summary for imaging errors
-            manifest_data_all_errors = combine_all_errors(manifest_data,
-                        ['Filename', 'entityId', 'Channel_Metadata_Filename', 'Manifest_Id', 'Component', 
-                         'Manifest_Version', 'HTAN_Center', 'Error_Channel_Metadata_Not_Found', 'md5', 'BQ_Hash']
-                    )
-            silver_manifests_all_errors = pd.concat([silver_manifests_all_errors, manifest_data_all_errors], ignore_index=True)
-        
-    
+            channel = get_channel_files(syn, manifest_data[:5], 
+                                        meta_map['ImagingLevel2'],
+                                        center_map)
+            manifest_data = merge_error_data(manifest_data,
+                                             channel[1],
+                                             'Error_Channel_Metadata_Not_Found')
+
+            # Summary for imaging errors
+            silver_manifests_all_errors = combine_all_errors(
+                        manifest_data,
+                        silver_manifests_all_errors,
+                        ['Filename', 'entityId',
+                         'Channel_Metadata_Filename',
+                         'Manifest_Id', 'Component', 
+                         'Manifest_Version', 'HTAN_Center',
+                         'Error_Channel_Metadata_Not_Found',
+                         'md5', 'BQ_Hash'])
+
         # Load table to BigQuery
-        silver_key = f"silver_METADATA_TABLE_{current_table.split('_', 4)[3]}"
-        load_bq_no_schema(client, 'htan-dcc', 'htan_medallion_silver', silver_key, manifest_data)
-        
-# ================================ #
-    # Final cleanup and loading
-    silver_manifests_all_errors_remove_miscounts = silver_manifests_all_errors.dropna(subset=[                                            
-                                                              'Filename',
-                                                              'BQ_Hash',
-                                                              'entityId',
-                                                              'Manifest_Id',
-                                                              'Component',
-                                                              'Channel_Metadata_Filename'], how='all')
-    first_cols = ['entityId', 'Manifest_Id', 'Manifest_Version', 'Component', 'HTAN_Center' , 'md5', 'Filename' ,'Channel_Metadata_Filename', 'BQ_Hash']
-    other_cols = [col for col in silver_manifests_all_errors_remove_miscounts.columns if col not in first_cols]
-    silver_manifests_all_errors_remove_miscounts = silver_manifests_all_errors_remove_miscounts.reindex(columns=first_cols + other_cols)
-    silver_manifests_all_errors_remove_miscounts['BQ_Hash'] = silver_manifests_all_errors_remove_miscounts['BQ_Hash'].astype(str)
-    load_bq_no_schema(client, 'htan-dcc', 'htan_medallion_silver', 'silver_INDEXING_TABLE_All_Error_Tagged_Files', silver_manifests_all_errors_remove_miscounts)
+        load_bq(client, 'htan-dcc', 'htan_medallion_silver',
+                f"silver_METADATA_TABLE_{current_table.split('_', 4)[3]}",
+                manifest_data)
 
-# ================================ #   
-    # Summarize Errors    
-    num_rows_manifests = silver_manifests_all_errors_remove_miscounts.groupby(['Manifest_Id', 'Component'])['BQ_Hash'].count().reset_index(name='Count')
-    error_counts_grouped = silver_manifests_all_errors_remove_miscounts.groupby(['Manifest_Id', 'Component', 'HTAN_Center'])[
-        ['Error_Not_Unique_Demo', 
-         'Error_Not_Unique_Bios', 
-         'Error_Adjacent_Bios', 
-         'Error_Not_Unique_HTAN_ID',
-         'Error_Ending_Not_Conform_HTAN_Standard', 
-         'Error_Basename_Not_Conform_HTAN_Standard', 
-         'Error_Parent_Not_Found',
-         'File_Removal_Reason', 
-         'Manifest_Removal_Reason', 
-         'Error_Channel_Metadata_Not_Found']
-    ].count()
+    # ----------------------------------------
+    #        TABLE CLEAN-UP & LOADING
+    # ----------------------------------------
+
+    silver_manifests_all_errors_drop = silver_manifests_all_errors.dropna(
+        subset=['Filename',
+                'BQ_Hash',
+                'entityId',
+                'Manifest_Id',
+                'Component',
+                'Channel_Metadata_Filename'], how='all')
+    first_cols = ['entityId', 'Manifest_Id', 'Manifest_Version',
+                  'Component', 'HTAN_Center' , 'md5', 'Filename',
+                  'Channel_Metadata_Filename', 'BQ_Hash']
+    other_cols = [col for col in silver_manifests_all_errors_drop.columns \
+                  if col not in first_cols]
+    silver_manifests_all_errors_drop = silver_manifests_all_errors_drop \
+                                       .reindex(columns=first_cols + other_cols)
+    silver_manifests_all_errors_drop['BQ_Hash'] = silver_manifests_all_errors_drop['BQ_Hash'] \
+                                                  .astype(str)
+    load_bq(client, 'htan-dcc', 'htan_medallion_silver',
+            'silver_INDEXING_TABLE_All_Error_Tagged_Files',
+            silver_manifests_all_errors_drop)
+
+    # Summarize Errors
+    num_rows_manifests = silver_manifests_all_errors_drop \
+                         .groupby(['Manifest_Id','Component'])['BQ_Hash'] \
+                         .count().reset_index(name='Count')
+    error_counts_grouped = silver_manifests_all_errors_drop \
+                            .groupby(['Manifest_Id', 'Component', 'HTAN_Center'])[
+                            ['Error_Not_Unique_Demo', 
+                            'Error_Not_Unique_Bios', 
+                            'Error_Adjacent_Bios', 
+                            'Error_Not_Unique_HTAN_ID',
+                            'Error_Ending_Not_Conform_HTAN_Standard', 
+                            'Error_Basename_Not_Conform_HTAN_Standard', 
+                            'Error_Parent_Not_Found',
+                            'File_Removal_Reason', 
+                            'Manifest_Removal_Reason', 
+                            'Error_Channel_Metadata_Not_Found']].count()
     error_counts_grouped['Total'] = error_counts_grouped.sum(axis=1)
-    Manifests_grouped_error_counts = pd.merge(error_counts_grouped, num_rows_manifests, on='Manifest_Id', how='left')
-    
-    bronze_manifests = client.query("""SELECT * FROM `htan-dcc.htan_medallion_bronze.bronze_INDEXING_TABLE_Manifests`""").result().to_dataframe()
+    Manifests_grouped_error_counts = pd.merge(error_counts_grouped,
+                                              num_rows_manifests,
+                                              on='Manifest_Id', how='left')
+    bronze_manifests = client.query(
+        """SELECT *
+        FROM `htan-dcc.htan_medallion_bronze.bronze_INDEXING_TABLE_Manifests`""") \
+        .result().to_dataframe()
     bronze_manifests.rename(columns={'manifestEntityId': 'Manifest_Id'}, inplace=True)
-    bronze_manifests = bronze_manifests[['Manifest_Id', 'path', 'modifiedDate', 'createdDate', 'dataFileMD5Hex']]
-    Manifests_grouped_error_counts = pd.merge(Manifests_grouped_error_counts, bronze_manifests, on='Manifest_Id', how='left')
-
+    bronze_manifests = bronze_manifests[['Manifest_Id',
+                                         'path',
+                                         'modifiedDate',
+                                         'createdDate',
+                                         'dataFileMD5Hex']]
+    Manifests_grouped_error_counts = pd.merge(Manifests_grouped_error_counts,
+                                              bronze_manifests,
+                                              on='Manifest_Id',
+                                              how='left')
     Manifests_grouped_error_counts.rename(columns={'Total': 'Number of Errors', 
                                                    'Count': 'Number of Rows'}, inplace=True)
+    load_bq(client, 'htan-dcc',
+            'htan_medallion_silver',
+            'silver_INDEXING_TABLE_All_Errors_Grouped_Counts',
+            Manifests_grouped_error_counts)
 
-    load_bq_no_schema(client, 'htan-dcc', 'htan_medallion_silver', 'silver_INDEXING_TABLE_All_Errors_Grouped_Counts', Manifests_grouped_error_counts)
-# ================================ #
-    #Make table with only errors
+    # Make table with only errors
     error_only_data = Manifests_grouped_error_counts[Manifests_grouped_error_counts['Number_of_Errors'] != 0]
-    load_bq_no_schema(client, 'htan-dcc', 'htan_medallion_silver', 'silver_INDEXING_TABLE_All_All_Errors_Across_Manifests', error_only_data)
-# ================================ # 
-#Not Released Errors
-    Released = client.query("""SELECT * FROM `htan-dcc.released.entities`""").result().to_dataframe()
-    Not_Released_Errors_All = silver_manifests_all_errors_remove_miscounts[~silver_manifests_all_errors_remove_miscounts["entityId"].isin(Released["entityId"])]
-    load_bq_no_schema(client, 'htan-dcc', 'htan_medallion_silver', 'silver_INDEXING_TABLE_All_Tested_Manifests_Not_Released', Not_Released_Errors_All)
+    load_bq(client, 'htan-dcc',
+            'htan_medallion_silver',
+            'silver_INDEXING_TABLE_All_All_Errors_Across_Manifests',
+            error_only_data)
 
-    Released_Manifests = client.query("""SELECT * FROM `htan-dcc.released.metadata`""").result().to_dataframe()
+    # Not Released Errors
+    Released = client.query(
+        """SELECT *
+        FROM `htan-dcc.released.entities`""").result().to_dataframe()
+    Not_Released_Errors_All = silver_manifests_all_errors_drop[~silver_manifests_all_errors_drop["entityId"].isin(Released["entityId"])]
+    load_bq(client, 'htan-dcc',
+            'htan_medallion_silver',
+            'silver_INDEXING_TABLE_All_Tested_Manifests_Not_Released',
+            Not_Released_Errors_All)
+
+    Released_Manifests = client.query(
+        """SELECT *
+        FROM `htan-dcc.released.metadata`""").result().to_dataframe()
     Not_Released_Errors_Manifests_grouped_error_counts = error_only_data[~error_only_data["Manifest_Id"].isin(Released_Manifests["Manifest_Id"])]
-    load_bq_no_schema(client, 'htan-dcc', 'htan_medallion_silver', 'silver_INDEXING_TABLE_All_Errors_Grouped_Counts_Not_Released', Not_Released_Errors_Manifests_grouped_error_counts)
-# ================================ #
+    load_bq(client, 'htan-dcc',
+            'htan_medallion_silver',
+            'silver_INDEXING_TABLE_All_Errors_Grouped_Counts_Not_Released',
+            Not_Released_Errors_Manifests_grouped_error_counts)
 
 
-# ================================ #
-# Entry Point
-# ================================ #
 if __name__ == "__main__":
     main()

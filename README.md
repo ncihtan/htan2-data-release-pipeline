@@ -73,8 +73,7 @@ For the complete standard operating procedure (SOP) for releasing HTAN data, ple
 │   │   ├── synapse-2raw/
 │   │   │   ├── synapse-2raw.py
 │   ├── workflow_functions/
-│   │   ├── bq_load.py
-│   │   ├── bq_load_with_schema.py
+│   │   ├── client_load.py
 │   │   ├── file_validation.py
 ├── environment.yml
 ├── requirements.txt
