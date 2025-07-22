@@ -3,7 +3,7 @@
 """
 Medallion Architecture: Synapse to Raw Level
 
-    TThis module loads and prepares metadata from Synapse for integration into the
+    This module loads and prepares metadata from Synapse for integration into the
     Medallion Architecture's raw data layer.
 
 Configurations: None

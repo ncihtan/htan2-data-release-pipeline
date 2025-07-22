@@ -50,15 +50,15 @@ For the complete standard operating procedure (SOP) for releasing HTAN data, ple
 │   │   ├── configs.json
 │   │   ├── configs.yaml
 │   ├── medallion_architecture/
-│   │   ├── bq-bronze2silver/
-│   │   │   ├── bq-bronze2silver.py
+│   │   ├── bq_bronze2silver/
+│   │   │   ├── bq_bronze2silver.py
 │   │   │   ├── config.json
 │   │   │   ├── config.yaml
-│   │   ├── bq-raw2bronze/
-│   │   │   ├── bq-raw2bronze.py
+│   │   ├── bq_raw2bronze/
+│   │   │   ├── bq_raw2bronze.py
 │   │   │   ├── config.json
 │   │   │   ├── config.yaml
-│   │   ├── bq-silver2gold/
+│   │   ├── bq_silver2gold/
 │   │   │   ├── cds_dbgap/
 │   │   │   |   ├── tables/
 │   │   │   |   |   ├── v24.8.1.img/
@@ -69,14 +69,16 @@ For the complete standard operating procedure (SOP) for releasing HTAN data, ple
 │   │   │   |   |   |   ├── CDS_Genomics_v24.8.1.seq.xlsx
 │   │   │   |   |   |   ├── ... 3 CSVs and 2 TXTs
 │   │   │   |   |   |   ├── genomics_validation_output_2024-08-20.txt
-│   │   │   ├── bq-silver2gold.py
-│   │   ├── synapse-2raw/
-│   │   │   ├── synapse-2raw.py
+│   │   │   ├── bq_silver2gold.py
+│   │   ├── synapse_2raw/
+│   │   │   ├── synapse_2raw.py
 │   ├── workflow_functions/
 │   │   ├── client_load.py
 │   │   ├── file_validation.py
-├── environment.yml
-├── requirements.txt
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── run.py
+|── environment.yml
 ├── README.md (Current File)
 ```
 
@@ -109,11 +111,11 @@ conda deactivate
 ```
 
 #### Pip
-You may also install these packages locally using the [`requirements.txt`](./requirements.txt) file. However, this approach is **not recommended**, as version conflicts with existing packages on your machine may arise.
+You may also install these packages locally using the [`requirements.txt`](./htan-data-release-pipeline/requirements.txt) file. However, this approach is **not recommended**, as version conflicts with existing packages on your machine may arise.
 
 To install the specified packages on your local machine, run the following command:
 ```bash
-pip install -r requirements.txt
+pip install -r htan-data-release-pipeline/requirements.txt
 ```
 <a id="data-storage"></a>
 ## Data Storage
