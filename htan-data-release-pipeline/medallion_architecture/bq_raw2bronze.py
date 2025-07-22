@@ -11,8 +11,7 @@ Medallion Architecture: Raw to Bronze Level
 Configurations:
 
     This module reads configuration settings from
-    'medallion_architecture/bq_raw2bronze/config.json'
-    and 'medallion_architecture/bq_raw2bronze/schema.json'
+    'configs/config.json' and 'configs/schema.json'
     for Synapse and BigQuery data retrieval.
 
 Functions: None
@@ -41,7 +40,7 @@ from workflow_functions.client_load import (
 # Instantiate synapse client
 syn = init_synapse_client()
 
-with open('medallion_architecture/bq_raw2bronze/config.json', 'r') as file:
+with open('configs/config.json', 'r') as file:
     config_file = json.load(file)
 
 # Environment variables
@@ -245,7 +244,7 @@ def main():
                 `htan-dcc.htan_medallion_bronze.INFORMATION_SCHEMA.COLUMNS`
                 """).result().to_dataframe()
 
-    bq_schema = json.load(open('medallion_architecture/bq_raw2bronze/schema.json'))
+    bq_schema = json.load(open('configs/schema.json'))
 
     f = pd.DataFrame()
 
@@ -364,3 +363,6 @@ def main():
         print(f"\n Folder tmp/ removed successfully.")
     except OSError as e:
         print(f"Error: {e}")
+
+if __name__ == "__main__":
+    main()

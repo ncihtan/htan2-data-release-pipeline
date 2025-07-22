@@ -49,29 +49,12 @@ For the complete standard operating procedure (SOP) for releasing HTAN data, ple
 │   ├── configs/
 │   │   ├── configs.json
 │   │   ├── configs.yaml
+│   │   ├── schema.json
 │   ├── medallion_architecture/
-│   │   ├── bq_bronze2silver/
-│   │   │   ├── bq_bronze2silver.py
-│   │   │   ├── config.json
-│   │   │   ├── config.yaml
-│   │   ├── bq_raw2bronze/
-│   │   │   ├── bq_raw2bronze.py
-│   │   │   ├── config.json
-│   │   │   ├── config.yaml
-│   │   ├── bq_silver2gold/
-│   │   │   ├── cds_dbgap/
-│   │   │   |   ├── tables/
-│   │   │   |   |   ├── v24.8.1.img/
-│   │   │   |   |   |   ├── CDS_Imaging_Channel_Metadata_Files_v24.8.1.img.csv
-│   │   │   |   |   |   ├── ... 6 CSVs and 1 TXT
-│   │   │   |   |   |   ├── imaging_validation_output_2024-09-04.txt
-│   │   │   |   |   ├── v24.8.1.seq/
-│   │   │   |   |   |   ├── CDS_Genomics_v24.8.1.seq.xlsx
-│   │   │   |   |   |   ├── ... 3 CSVs and 2 TXTs
-│   │   │   |   |   |   ├── genomics_validation_output_2024-08-20.txt
-│   │   │   ├── bq_silver2gold.py
-│   │   ├── synapse_2raw/
-│   │   │   ├── synapse_2raw.py
+│   │   ├── bq_bronze2silver.py
+│   │   ├── bq_raw2bronze.py
+│   │   ├── bq_silver2gold.py
+│   │   ├── synapse_2raw.py
 │   ├── workflow_functions/
 │   │   ├── client_load.py
 │   │   ├── file_validation.py

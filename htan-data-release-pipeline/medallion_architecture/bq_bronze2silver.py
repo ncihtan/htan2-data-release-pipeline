@@ -12,8 +12,7 @@ Medallion Architecture: Bronze to Silver Level
 Configurations:
 
     This module reads configuration settings from
-    'medallion_architecture/bq_bronze2silver/config.yaml'
-    and 'medallion_architecture/bq_bronze2silver/config.json'
+    'configs/config.yaml' and 'configs/config.json'
     for Synapse and BigQuery data retrieval.
 
 Functions:
@@ -53,10 +52,10 @@ from workflow_functions.client_load import (
 # ----------------------------------------
 
 
-with open('./medallion_architecture/bq_bronze2silver/config.yaml', 'r') as file:
+with open('./configs/config.yaml', 'r') as file:
     config_yaml = yaml.safe_load(file)
 
-with open('./medallion_architecture/bq_bronze2silver/config.json', 'r') as file:
+with open('./configs/config.json', 'r') as file:
     config_json = json.load(file)
 
 # Set environment variables
