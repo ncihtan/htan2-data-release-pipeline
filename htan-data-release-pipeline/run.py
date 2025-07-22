@@ -7,7 +7,7 @@ Run the HTAN Data Release Pipeline
 Configurations: None
 
 Functions:
-    - print_section(title: str)
+    - print_section(title)
     
 Author:       Yamina Katariya <ykatariy@systemsbiology.org>
 Date Created: 07-21-2025
@@ -16,10 +16,10 @@ Modified By:  NA
 """
 import os
 
-from medallion_architecture.synapse_2raw import synapse_2raw as s2r
-from medallion_architecture.bq_raw2bronze import bq_raw2bronze as r2b
-from medallion_architecture.bq_bronze2silver import bq_bronze2silver as b2s
-from medallion_architecture.bq_silver2gold import bq_silver2gold as s2g
+from medallion_architecture import synapse_2raw as s2r
+from medallion_architecture import bq_raw2bronze as r2b
+from medallion_architecture import bq_bronze2silver as b2s
+from medallion_architecture import bq_silver2gold as s2g
 
 def print_section(title):
     """
