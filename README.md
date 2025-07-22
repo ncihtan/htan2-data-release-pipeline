@@ -135,9 +135,7 @@ You *may* need a key to access Google Cloud/BigQuery via an outside source such 
 
 <a id="scheduled-jobs"></a>
 ## Scheduled Jobs
-Scheduled and triggered validation scrips are ran using [Google Cloud Run](https://cloud.google.com/run?hl=en). There are 3 repositories that are run as separate jobs. Below are links to each repository:
-- [drs-uri-table-cloud-run](https://github.com/ncihtan/drs-uri-table-cloud-run/tree/main)
-- [bq-metadata-cloud-run](https://github.com/ncihtan/bq-metadata-cloud-run)
-- [data-release-cloud-run](https://github.com/ncihtan/data-release-cloud-run)
+Scheduled and triggered validation scrips are ran using [Google Cloud Run](https://cloud.google.com/run?hl=en). Below are the active jobs associated with this repository:
+- [Job: htan-data-release-pipeline](https://console.cloud.google.com/run/jobs/details/us-west1/htan-data-release-pipeline/executions?inv=1&invt=Ab3eHQ&project=htan-dcc)
 
-UPDATE GOOGLE CLOUD RUN REPOSITORIES WHEN THEY'VE BEEN MADE!!!
+For documentation on how to set-up and schedule a Google Cloud Run job, refer to [SOP: Setting-Up and Scheduling Google Cloud Run Jobs]().
