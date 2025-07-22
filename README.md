@@ -50,6 +50,9 @@ For the complete standard operating procedure (SOP) for releasing HTAN data, ple
 │   │   ├── configs.json
 │   │   ├── configs.yaml
 │   │   ├── schema.json
+│   ├── images/
+│   │   ├── HTAN_banner.jpg
+│   │   ├── HTAN_logo.png
 │   ├── medallion_architecture/
 │   │   ├── bq_bronze2silver.py
 │   │   ├── bq_raw2bronze.py
@@ -58,11 +61,11 @@ For the complete standard operating procedure (SOP) for releasing HTAN data, ple
 │   ├── workflow_functions/
 │   │   ├── client_load.py
 │   │   ├── file_validation.py
-│   ├── Dockerfile
-│   ├── requirements.txt
 │   ├── run.py
-|── environment.yml
+|── Dockerfile
 ├── README.md (Current File)
+|── environment.yml
+|── requirements.txt
 ```
 
 <a id="installation"></a>
@@ -94,7 +97,7 @@ conda deactivate
 ```
 
 #### Pip
-You may also install these packages locally using the [`requirements.txt`](./htan-data-release-pipeline/requirements.txt) file. However, this approach is **not recommended**, as version conflicts with existing packages on your machine may arise.
+You may also install these packages locally using the [`requirements.txt`](./requirements.txt) file. However, this approach is **not recommended**, as version conflicts with existing packages on your machine may arise.
 
 To install the specified packages on your local machine, run the following command:
 ```bash
