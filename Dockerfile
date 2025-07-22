@@ -13,8 +13,8 @@ RUN export CLOUD_SDK_VERSION="410.0.0" && \
 
 WORKDIR /app
 
-COPY htan-data-release-pipeline/ /app/
+COPY . /app
 
-RUN pip3 install --no-cache-dir --upgrade -r requirements.txt
+RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt
 
-CMD ["python3","run.py"]
+CMD ["python3","htan-data-release-pipeline/run.py"]
