@@ -101,7 +101,7 @@ You may also install these packages locally using the [`requirements.txt`](./req
 
 To install the specified packages on your local machine, run the following command:
 ```bash
-pip install -r htan-data-release-pipeline/requirements.txt
+pip install -r requirements.txt
 ```
 <a id="data-storage"></a>
 ## Data Storage
