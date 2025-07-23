@@ -51,6 +51,7 @@ For the complete standard operating procedure (SOP) for releasing HTAN data, ple
 │   │   ├── configs.yaml
 │   │   ├── schema.json
 │   ├── images/
+│   │   ├── BigQuery_medallion_architecture.svg
 │   │   ├── HTAN_banner.jpg
 │   │   ├── HTAN_logo.png
 │   ├── medallion_architecture/
