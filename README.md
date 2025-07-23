@@ -54,6 +54,7 @@ For the complete standard operating procedure (SOP) for releasing HTAN data, ple
 │   │   ├── HTAN_banner.jpg
 │   │   ├── HTAN_logo.png
 │   ├── medallion_architecture/
+│   │   ├── README.md
 │   │   ├── bq_bronze2silver.py
 │   │   ├── bq_raw2bronze.py
 │   │   ├── bq_silver2gold.py
