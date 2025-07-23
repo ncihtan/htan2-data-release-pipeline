@@ -197,10 +197,6 @@ def main():
     Main function to process and load Synapse data into BigQuery.
     """
 
-    # ----------------------------------------
-    #        SILVER TABLE DETERMINATION
-    # ----------------------------------------
-
     # Initialize clients
     syn = init_synapse_client()
     client = init_bq_client()
@@ -321,10 +317,6 @@ def main():
         load_bq(client, 'htan-dcc', 'htan_medallion_silver',
                 f"silver_METADATA_TABLE_{current_table.split('_', 4)[3]}",
                 manifest_data)
-
-    # ----------------------------------------
-    #        TABLE CLEAN-UP & LOADING
-    # ----------------------------------------
 
     silver_manifests_all_errors_drop = silver_manifests_all_errors.dropna(
         subset=['Filename',

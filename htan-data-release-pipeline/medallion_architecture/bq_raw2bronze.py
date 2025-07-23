@@ -14,7 +14,8 @@ Configurations:
     'configs/config.json' and 'configs/schema.json'
     for Synapse and BigQuery data retrieval.
 
-Functions: None
+Functions:
+    - main()
     
 Author:       Dar'ya Pozhidayeva <dpozhida@systemsbiology.org>
 Date Created: 12-12-2024
@@ -57,7 +58,7 @@ assays = config_file['assays']
 
 def main():
     """
-    Hello
+    Main function to evaluate and promote data to the Bronze level.
     """
 
     # Instantiate google bigquery client
@@ -360,7 +361,7 @@ def main():
     # Remove temporary folder
     try:
         shutil.rmtree('tmp/')
-        print(f"\n Folder tmp/ removed successfully.")
+        print("\n Folder tmp/ removed successfully.")
     except OSError as e:
         print(f"Error: {e}")
 
