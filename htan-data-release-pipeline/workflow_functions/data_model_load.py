@@ -8,13 +8,15 @@ Configurations: None
 
 Functions:
     - make_requests(url, path)
+    - remove_data_model_files()
     - get_enums(schema)
     - append_values(definition, class_name, attr_name, enum_lookup, row, path)
-    - get_yaml_files(url, path, schema_df)
+    - get_schema(url, path, schema_df)
+    - set_up_github_scrape(schema_df=None)
     - main()
     
 Author:       Yamina Katariya <ykatariy@systemsbiology.org>
-Date Created: 10-06-2025
+Date Created: 10-15-2025
 Date Updated: 
 Modified By:  
 """
@@ -44,6 +46,9 @@ def make_requests(url, path):
 
     yaml_files = [f for f in files if f["name"].endswith(".yaml")]
 
+    # Ensure download directory exists
+    os.makedirs(path, exist_ok=True)
+
     # Download files into specified path
     for f in yaml_files:
         print(f"Downloading {f["name"]}...")
@@ -54,6 +59,10 @@ def make_requests(url, path):
             out.write(content)
 
     return yaml_files
+
+def remove_data_model_files():
+    """Remove HTAN Data Model YAML download folder."""
+    shutil.rmtree("./modules/")
 
 def get_enums(schema):
     """
@@ -123,7 +132,7 @@ def append_values(definition, class_name, attr_name, enum_lookup, row, path):
     return row
 
 
-def get_yaml_files(url, path, schema_df):
+def get_schema(url, path, schema_df):
     """
     Converts and concatenates YAML formatted schema metadata as a
     Pandas DataFrame.
@@ -136,8 +145,6 @@ def get_yaml_files(url, path, schema_df):
     Returns:
         - pandas.DataFrame: HTAN data model schema as a DataFrame.
     """
-    # Download corresponding YAML files
-    os.makedirs(path, exist_ok=True)
     yaml_files = make_requests(url, path)
 
     rows=[]
@@ -185,19 +192,19 @@ def get_yaml_files(url, path, schema_df):
                     if (rules_map is not None) and (attr in rules_map):
                         item["Conditional If"] = rules_map[attr]['description']
 
-    # Remove temp folder
-    shutil.rmtree("./modules/")
-
     return pd.concat([schema_df, pd.DataFrame(rows)], ignore_index=True)
 
-def main():
+def set_up_github_scrape(schema_flag=False):
     """
-    Main entry into module. Calls the htan-linkml GitHub, extracts the
-    Data Model as YAML files, and represents the Data Model schema as a
-    DataFrame.
+    Downloads HTAN Data Model YAML files from GitHub.
+
+    Args:
+        - schema_df (pandas.DataFrame): Optional. Empty DataFrame
+            with predefined column names.
 
     Returns:
-        - pandas.DataFrame: HTAN data model schema as a DataFrame.
+        - schema_df (pandas.DataFrame): HTAN Data Model represented
+            in a DataFrame.
     """
 
     schema_df = pd.DataFrame(columns=['Module', 'Domain', 'Attribute',
@@ -209,8 +216,28 @@ def main():
         print(f"\nCollecting HTAN Data Model Schema for {module}")
         url = f"https://api.github.com/repos/ncihtan/htan-linkml/contents/modules/{module}/domains"
         path = f"./modules/{module}/domains"
-        schema_df = get_yaml_files(url, path, schema_df)
 
-    schema_df.to_csv("Helooo.csv", header=True)
+        # Format the schema if flag is true
+        if schema_flag is True:
+            schema_df = get_schema(url, path, schema_df)
+        else:
+            _ = make_requests(url, path)
+
+    return schema_df
+
+def main():
+    """
+    Main entry into module. Calls the htan-linkml GitHub, extracts the
+    Data Model as YAML files, and represents the Data Model schema as a
+    DataFrame.
+
+    Returns:
+        - pandas.DataFrame: HTAN data model schema as a DataFrame.
+    """
+
+    schema_df = set_up_github_scrape(schema_flag=True)
+
+    # REMOVE L8R, WILL BE LOADED TO BQ
+    schema_df.to_csv("HTAN_Data_Model_Schema.csv", header=True)
 
     return schema_df
