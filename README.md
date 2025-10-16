@@ -55,14 +55,25 @@ For the complete standard operating procedure (SOP) for releasing HTAN data, ple
 │   │   ├── HTAN_banner.jpg
 │   │   ├── HTAN_logo.png
 │   ├── medallion_architecture/
-│   │   ├── README.md
+│   │   ├── synapse_2raw.py/
+│   │   │   ├── common/
+│   │   │   │   ├── utils.py
+│   │   │   ├── job/
+│   │   │   │   ├── center_config.yml
+│   │   │   │   ├── Dockerfile
+│   │   │   │   ├── main.py
+│   │   │   ├── requirements.txt
 │   │   ├── bq_bronze2silver.py
 │   │   ├── bq_raw2bronze.py
 │   │   ├── bq_silver2gold.py
-│   │   ├── synapse_2raw.py
+│   │   ├── README.md
+│   ├── utils/
+│   │   ├── data_utils.py
 │   ├── workflow_functions/
+│   │   ├── bq_validation.py
 │   │   ├── client_load.py
-│   │   ├── file_validation.py
+│   │   ├── data_model_load.py
+│   │   ├── data_model_validation.py
 │   ├── run.py
 |── Dockerfile
 ├── README.md (Current File)
