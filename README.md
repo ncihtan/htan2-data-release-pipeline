@@ -5,9 +5,9 @@
 <a id="introduction"></a>
 ## Introduction
 
-Timely and reliable data releases are essential to large research initiatives, enabling public aßccess to high-quality datasets that drive scientific discovery. In the Human Tumor Atlas Network (HTAN), data is made available through Sage Bionetwork's [Synapse](https://www.synapse.org/) platform and the National Cancer Institute’s (NCI) Cancer Research Data Commons (CRDC) [General Commons](https://datacommons.cancer.gov/repository/general-commons) (GC). Before releases, datasets undergo validation to ensure quality, consistency, and compliance with standards.
+Timely and reliable data releases are essential to large research initiatives, enabling public access to high-quality datasets that drive scientific discovery. In the Human Tumor Atlas Network (HTAN), data is made available through the [HTAN Data Portal](https://humantumoratlas.org/explore), Sage Bionetwork's [Synapse](https://www.synapse.org/) platform, the National Cancer Institute’s (NCI) Cancer Research Data Commons (CRDC) [General Commons](https://datacommons.cancer.gov/repository/general-commons) (GC), and the [Institute for Systems Biology Cancer Gateway in the Cloud (ISB-CGC)](https://portal.isb-cgc.org/). Before releases, datasets undergo validation to ensure quality, consistency, and compliance with standards.
 
-For the complete standard operating procedure (SOP) for releasing HTAN data, please review [SOP: HTAN Phase 2 Data Release](). 
+For the complete standard operating procedure (SOP) for releasing HTAN data, please review [SOP: HTAN Data Release (General)](https://docs.google.com/document/d/1P4rojKgx2Alomjxu4Zu2keJ0jApf8OZl1RNBoJEqkQ0/edit?usp=drive_link). 
 
 #### Team Members:
 | Name                   | GitHub             |
@@ -28,6 +28,7 @@ For the complete standard operating procedure (SOP) for releasing HTAN data, ple
   * [Synapse](#synapse)
   * [Google BigQuery](#bigquery)
 * [Scheduled Jobs](#scheduled-jobs)
+* [Relevant Repositories](#relevant-repos)
 
 <a id="tasks-of-interest"></a>
 ## Tasks of Interest
@@ -155,3 +156,19 @@ Scheduled and triggered validation scrips are ran using [Google Cloud Run](https
 - [Job: htan-data-release-pipeline](https://console.cloud.google.com/run/jobs/details/us-west1/htan-data-release-pipeline/executions?inv=1&invt=Ab3eHQ&project=htan-dcc)
 
 For documentation on how to set-up and schedule a Google Cloud Run job, refer to [SOP: Setting-Up and Scheduling Google Cloud Run Jobs]().
+
+<a id="relevant-repos"></a>
+## Relevant Repositories
+Below are a list of repositories associated with this data release pipeline:
+
+- **CRDC GC Release Pipeline**
+  - [htan-to-crdc-map:](https://github.com/ncihtan/htan-to-crdc-map) Metadata generation required for CRDC submission.
+  - [htan-to-crdc-nextflow-uploader:](https://github.com/ncihtan/htan-to-crdc-nextflow-uploader) File transfer from Synapse to CRDC.
+- **HTAN Exclusion Request Portal**
+  - [htan-exclusion-list:](https://github.com/ncihtan/htan-exclusion-list) Streamlit app interface for exclusion requests.
+- **HTAN Data Portal**
+  - [htan-portal:](https://github.com/ncihtan/htan-portal) Backend for the main HTAN Data Portal website. Managed by MSK.
+- **HTAN Dashbord**
+  - [hdash_air:](https://github.com/ncihtan/hdash_air) Dashboard that displays project-specific data submission errors. Managed by MSK.
+
+
