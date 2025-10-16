@@ -16,7 +16,7 @@
     },
     {
         "description": "Synapse ID of entity",
-        "name": "entityId",
+        "name": "entity_id",
         "type": "STRING"
     },
     {
@@ -26,7 +26,7 @@
     },
     {
         "description": "Name of HTAN Center e.g. HTAN HTAPP",
-        "name": "HTAN_Center",
+        "name": "project_name",
         "type": "STRING"
     },
     {
