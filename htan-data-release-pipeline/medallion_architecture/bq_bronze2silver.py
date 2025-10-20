@@ -33,7 +33,7 @@ import os
 import json
 import pandas as pd
 import yaml
-from workflow_functions.file_validation import (
+from workflow_functions.bq_validation import (
     htan_id_unique,
     htan_id_regex,
     basename_regex,

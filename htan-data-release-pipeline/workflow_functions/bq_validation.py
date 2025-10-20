@@ -33,13 +33,12 @@ Functions:
     
 Author:       Clarisse Lau <clau@systemsbiology.org>
 Date Created: 05-15-2024
-Date Updated: 07-17-2025
+Date Updated: 10-15-2025
 Modified By:  Yamina Katariya <ykatariy@systemsbiology.org>
 """
-
-import pandas as pd
 import re
 import os
+import pandas as pd
 import numpy as np
 
 def unique_bios(meta_map,id_prov_table):
@@ -53,7 +52,8 @@ def unique_bios(meta_map,id_prov_table):
             a DataFrame.
 
     Returns:
-        - error_list (dict): Entity IDs and their error messages as key-value pairs. 
+        - error_list (dict): Entity IDs and their error messages as key-value
+            pairs. 
     """
     error_list = {}
     bios = meta_map['Biospecimen']
@@ -61,12 +61,12 @@ def unique_bios(meta_map,id_prov_table):
         'HTAN_Biospecimen_ID',keep=False)
         ].sort_values(by=['HTAN_Biospecimen_ID'])
 
-    for i,r in dup_bios.iterrows():
+    for _,r in dup_bios.iterrows():
         bios_id = r['HTAN_Biospecimen_ID']
         downstream_files = get_downstream_files(bios_id,id_prov_table)
         manifest_list = list(dup_bios[dup_bios['HTAN_Biospecimen_ID']==bios_id]['Manifest_Id'])
 
-        for i,r in downstream_files.iterrows():
+        for _,r in downstream_files.iterrows():
             error_msg = f"""Multiple records found for parent biospecimen {bios_id}
                             in manifests {manifest_list}
                         """
@@ -93,12 +93,12 @@ def unique_demographics(meta_map,id_prov_table):
         'HTAN_Participant_ID',keep=False)
         ].sort_values(by=['HTAN_Participant_ID'])
 
-    for i,r in dup_bios.iterrows():
+    for _,r in dup_bios.iterrows():
         case_id = r['HTAN_Participant_ID']
         downstream_files = get_downstream_files(case_id,id_prov_table)
         manifest_list = list(dup_bios[dup_bios['HTAN_Participant_ID']==case_id]['Manifest_Id'])
 
-        for i,r in downstream_files.iterrows():
+        for _,r in downstream_files.iterrows():
             error_msg = f"""Multiple demographics records found for participant
                             {case_id} in manifests {manifest_list}
                         """
@@ -124,7 +124,7 @@ def adjacent_bios(meta_map,id_prov_table):
     bios['Adjacent_Biospecimen_IDs'] = bios[
         'Adjacent_Biospecimen_IDs'].astype(str)
 
-    for i,r in bios.iterrows():
+    for _,r in bios.iterrows():
         bios_id = r['HTAN_Biospecimen_ID']
         adj_bios = r['Adjacent_Biospecimen_IDs']
 
@@ -141,7 +141,7 @@ def adjacent_bios(meta_map,id_prov_table):
                 continue
 
             downstream_files = get_downstream_files(bios_id,id_prov_table)
-            for i,r in downstream_files.iterrows():
+            for _,r in downstream_files.iterrows():
                 error_msg = f"Upstream biospecimen {bios_id} is missing adjacent biospecimen {id}"
                 error_list.update({r['entityId']: error_msg})
 
@@ -235,7 +235,7 @@ def htan_id_regex(entities_to_release):
 
     error_list = {}
 
-    for i,r in entities_to_release.iterrows():
+    for _,r in entities_to_release.iterrows():
         if r['Component'] == 'AccessoryManifest':
             continue
 
@@ -271,7 +271,7 @@ def basename_regex(entities_to_release):
     """
     error_list = {}
 
-    for i,r in entities_to_release.iterrows():
+    for _,r in entities_to_release.iterrows():
         if r['Component'] == 'AccessoryManifest':
             continue
 
@@ -321,7 +321,7 @@ def parents_exist(entities_to_release,parent_id_map):
         entities_to_release['HTAN_Data_File_ID'])
     ]
 
-    for i,r in release_missing.iterrows():
+    for _,r in release_missing.iterrows():
         error_msg = f"File {r['primaryId']} is missing parent {r['parentId']}"
         error_list.update({r['entityId']: error_msg})
 
@@ -373,7 +373,7 @@ def get_channel_files(syn, new_release, imaging_all, center_map):
     missing = []
 
     # Walk down provided Synapse path to get entityId of channel metadata file
-    for i,r in channel_sub.iterrows():
+    for _,r in channel_sub.iterrows():
         channel = r['Channel_Metadata_Filename']
         id = next((value["synapse_id"] for key, value in center_map.items() \
                    if value.get("center_id") == r['Center_ID'].lower()), None)
@@ -400,7 +400,7 @@ def get_channel_files(syn, new_release, imaging_all, center_map):
 
     release_missing = new_img[new_img['Channel_Metadata_Filename'].isin(missing)]
 
-    for i,r in release_missing.iterrows():
+    for _,r in release_missing.iterrows():
         error_msg = f"Channel metadata file {r['Channel_Metadata_Filename']} not found"
         error_list.update({r['entityId']: error_msg})
 
