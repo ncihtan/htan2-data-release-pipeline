@@ -17,7 +17,7 @@ Modified By:  NA
 import os
 
 from medallion_architecture import bq_raw2bronze as r2b
-#from medallion_architecture import bq_bronze2silver as b2s
+from medallion_architecture import bq_bronze2silver as b2s
 #from medallion_architecture import bq_silver2gold as s2g
 
 from workflow_functions import data_model_load
@@ -40,21 +40,29 @@ curr_path = base_path + \
     'htan-data-release-pipeline/htan-data-release-pipeline/'
 os.chdir(curr_path)
 
-try:
-    print_section("HTAN DATA MODEL")
-    htan_schema = data_model_load.main()
-except Exception as e:
-    print("Failed to load HTAN Data Model")
-
-try:
-    print_section("LEVEL: RAW TO BRONZE")
-    r2b.main()
-except Exception as e:
-    print("Failed to run RAW TO BRONZE pipeline.")
+# -----------------------
+# BQ Destinations
+# -----------------------
+HTAN_BQ_PROJECT = "htan2-dcc"
+BRONZE_LAYER = "htan2_medallion_bronze"
+SILVER_LAYER = "htan2_medallion_silver"
+GOLD_LAYER = "htan2_medallion_gold"
 
 # try:
-#     print_section("LEVEL: BRONZE TO SILVER")
-#     b2s.main()
+#     print_section("HTAN DATA MODEL")
+#     htan_schema = data_model_load.main()
+# except Exception as e:
+#     print("Failed to load HTAN Data Model")
+
+# try:
+#     print_section("LEVEL: RAW TO BRONZE")
+#     r2b.main(HTAN_BQ_PROJECT, BRONZE_LAYER)
+# except Exception as e:
+#     print("Failed to run RAW TO BRONZE pipeline.")
+
+# try:
+print_section("LEVEL: BRONZE TO SILVER")
+b2s.main(HTAN_BQ_PROJECT, SILVER_LAYER, BRONZE_LAYER)
 # except Exception as e:
 #     print("Failed to run BRONZE TO SILVER pipeline.")
 
@@ -65,4 +73,4 @@ except Exception as e:
 #     print("Failed to run SILVER TO GOLD pipeline.")
 
 # Final clean-up
-data_model_load.remove_data_model_files()
+# data_model_load.remove_data_model_files()
