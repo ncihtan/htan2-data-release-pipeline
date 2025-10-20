@@ -1,8 +1,8 @@
 """
 Run the HTAN Data Release Pipeline
 
-    This module serves as the entry point into the data validation and release
-    staging pipeline.
+    This module serves as the entry point into the data validation and
+    release staging pipeline.
 
 Configurations: None
 
@@ -16,10 +16,11 @@ Modified By:  NA
 """
 import os
 
-from medallion_architecture import synapse_2raw as s2r
 from medallion_architecture import bq_raw2bronze as r2b
-from medallion_architecture import bq_bronze2silver as b2s
-from medallion_architecture import bq_silver2gold as s2g
+#from medallion_architecture import bq_bronze2silver as b2s
+#from medallion_architecture import bq_silver2gold as s2g
+
+from workflow_functions import data_model_load
 
 def print_section(title):
     """
@@ -40,10 +41,10 @@ curr_path = base_path + \
 os.chdir(curr_path)
 
 try:
-    print_section("LEVEL: SYNAPSE TO RAW")
-    s2r.main()
+    print_section("HTAN DATA MODEL")
+    htan_schema = data_model_load.main()
 except Exception as e:
-    print("Failed to run SYNAPSE TO RAW pipeline.")
+    print("Failed to load HTAN Data Model")
 
 try:
     print_section("LEVEL: RAW TO BRONZE")
@@ -51,14 +52,17 @@ try:
 except Exception as e:
     print("Failed to run RAW TO BRONZE pipeline.")
 
-try:
-    print_section("LEVEL: BRONZE TO SILVER")
-    b2s.main()
-except Exception as e:
-    print("Failed to run BRONZE TO SILVER pipeline.")
+# try:
+#     print_section("LEVEL: BRONZE TO SILVER")
+#     b2s.main()
+# except Exception as e:
+#     print("Failed to run BRONZE TO SILVER pipeline.")
 
-try:
-    print_section("LEVEL: SILVER TO GOLD")
-    s2g.main()
-except Exception as e:
-    print("Failed to run SILVER TO GOLD pipeline.")
+# try:
+#     print_section("LEVEL: SILVER TO GOLD")
+#     s2g.main()
+# except Exception as e:
+#     print("Failed to run SILVER TO GOLD pipeline.")
+
+# Final clean-up
+data_model_load.remove_data_model_files()
