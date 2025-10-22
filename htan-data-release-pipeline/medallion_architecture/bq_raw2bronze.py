@@ -61,7 +61,9 @@ def main():
     """).result().to_dataframe()
 
     components = sorted(all_annotations["component"].dropna().unique())
-
+    #Pull in BQ Hashing Table
+    bq_hash_table = client.query("""SELECT project_id, entity_id, name, value, BQ_hash FROM `htan2-dcc.synapse_raw.bq_hash_minting_table`""").result().to_dataframe()
+    bq_hash_table = bq_hash_table.rename(columns={"value": "HTAN_Data_File_ID"})
     # Generating combined assay tables
     print("\nGenerating Combined Assay Tables...\n")
     for component in components:
@@ -73,6 +75,8 @@ def main():
                                          axis=1)
         combined_assay_table = combined_assay_table.drop(columns=["component"],
                                                          errors="ignore")
+        #Apply BQ Hashing based on entity ID and HTAN Data File ID
+        combined_assay_table = pd.merge(combined_assay_table, bq_hash_table,on=["entity_id", "HTAN_Data_File_ID"],how="inner")
 
         # Create BigQuery table schema (STRING by default; File_Size/Manifest_Version as integer)
         bq_schema = []
