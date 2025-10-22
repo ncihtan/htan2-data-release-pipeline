@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
-#Update to Make HTAN File ID AND Synapse ID
-#Incase there are duplicae File IDs
-
 """
 HTAN BQ-Hash Generator: Synapse to Raw
 
