@@ -96,7 +96,6 @@ def combine_all_errors(manifest_data, error_df, columns):
     Returns:
         - pandas.Dataframe: Filtered manifest dataframe.
     """
-    # pd.concat([silver_manifests_all_errors, manifest_data_all_errors], ignore_index=True)
     return pd.concat([error_df, manifest_data[columns]], ignore_index=True)
 
 def get_exclusion_list(client, HTAN_BQ_PROJECT, dataset):
