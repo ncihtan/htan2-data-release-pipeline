@@ -170,6 +170,8 @@ def main():
             common_cols.append("HTAN_Parent_Biospecimen_ID")
         if "HTAN_Parent_Data_File_ID" in cols:
             common_cols.append("HTAN_Parent_Data_File_ID")
+        if "HTAN_Data_File_ID" in cols:
+            common_cols.append("BQ_Hash")
 
         df = client.query(f"""
             SELECT {", ".join(common_cols)}
@@ -265,7 +267,7 @@ def main():
 
     # Unique IDs (Datafile / Participant)
     unique_ids_minted_datafiles = (
-        id_prov[["entity_id", "HTAN_Data_File_ID", "project_name"]]
+        id_prov[["entity_id", "HTAN_Data_File_ID", "project_name", "BQ_Hash"]]
         .drop_duplicates("HTAN_Data_File_ID")
         .dropna()
     )
