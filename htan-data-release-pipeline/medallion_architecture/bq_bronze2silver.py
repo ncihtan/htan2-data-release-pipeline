@@ -80,8 +80,7 @@ def main(HTAN_BQ_PROJECT, SILVER_LAYER, BRONZE_LAYER):
     client = init_bq_client()
     id_provenance_bronze = client.query(
         f"""SELECT *
-        FROM `{HTAN_BQ_PROJECT}.{BRONZE_LAYER}.bronze_INDEXING_TABLE_Upstream_IDs`""") \
-        .result().to_dataframe()
+        FROM `{HTAN_BQ_PROJECT}.{BRONZE_LAYER}.bronze_INDEXING_TABLE_Upstream_IDs`""").result().to_dataframe()
 
     # Get manifest and file exclusion list
     exclusion_list = data_utils.get_exclusion_list(client, HTAN_BQ_PROJECT, "release_exclusions")
