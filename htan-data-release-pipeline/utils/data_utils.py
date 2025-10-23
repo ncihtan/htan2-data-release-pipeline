@@ -10,17 +10,23 @@ Functions:
     - flatten_annotation_list(lst)
     - sanitize_bq_name(name: str)
     - select_existing_columns(df: pd.DataFrame, cols: list[str])
+    - merge_error_data(manifest_data, error_data, column_name)
+    - combine_all_errors(manifest_data, error_df, columns)
+    - get_exclusion_list(client, HTAN_BQ_PROJECT, dataset)
+    - get_parent_ids(meta_map)
     
 Author:       Yamina Katariya <ykatariy@systemsbiology.org>
 Date Created: 10-15-2025
-Date Updated: 
-Modified By:  
+Date Updated: 10-23-2025
+Modified By:  Yamina Katariya <ykatariy@systemsbiology.org>
 """
 
 import re
 import pandas as pd
 
-# RAW TO BRONZE
+# ----------------------------------------
+#        RAW TO BRONZE LAYER
+# ----------------------------------------
 def flatten_annotation_list(lst):
     """
     Flatten a list of dicts with 'key' and 'value' into a flat dict.
@@ -64,7 +70,9 @@ def select_existing_columns(df: pd.DataFrame, cols: list[str]):
     """
     return [c for c in cols if c in df.columns]
 
-# BRONZE TO SILVER
+# ----------------------------------------
+#        BRONZE TO SILVER LAYER
+# ----------------------------------------
 def merge_error_data(manifest_data, error_data, column_name):
     """
     Helper function to merge error data into the manifest.
@@ -80,9 +88,9 @@ def merge_error_data(manifest_data, error_data, column_name):
         - pandas.Dataframe: Merged dataframe containing all manifest info
             and combined error notices.
     """
-    error_df = pd.DataFrame(error_data.items(), columns=['entityId', column_name])
+    error_df = pd.DataFrame(error_data.items(), columns=['entity_id', column_name])
 
-    return pd.merge(manifest_data, error_df, on='entityId', how='left')
+    return pd.merge(manifest_data, error_df, on='entity_id', how='left')
 
 def combine_all_errors(manifest_data, error_df, columns):
     """
@@ -98,14 +106,14 @@ def combine_all_errors(manifest_data, error_df, columns):
     """
     return pd.concat([error_df, manifest_data[columns]], ignore_index=True)
 
-def get_exclusion_list(client, HTAN_BQ_PROJECT, dataset):
+def get_exclusion_list(client, bq_project, dataset):
     """
     Retrieves metadata for files and projects that must be excluded from
     the data release.
 
     Args:
         - client (BigQuery instance): BigQuery client object.
-        - HTAN_BQ_PROJECT (string): BigQuery project name.
+        - bq_project (string): BigQuery project name.
         - dataset (string): BigQuery dataset name.
 
     Returns:
@@ -115,7 +123,7 @@ def get_exclusion_list(client, HTAN_BQ_PROJECT, dataset):
 
     exclusion_log = client.query(
         f"""SELECT *
-            FROM `{HTAN_BQ_PROJECT}.{dataset}.exclusion_list`"""
+            FROM `{bq_project}.{dataset}.exclusion_list`"""
     ).result().to_dataframe()
 
     exclusion_list = exclusion_log[exclusion_log['Status'] == "EXCLUDE"]
@@ -154,13 +162,15 @@ def get_parent_ids(meta_map):
 
     return id_list
 
-def map_metadata(client, HTAN_BQ_PROJECT, MEDALLION_LAYER):
+def map_metadata(client, bq_project, medallion_layer):
     """
     Build and return a dictionary (meta_map) that groups metadata
     tables by their component value BigQuery tables.
 
     Args:
         - client (BigQuery instance): BigQuery client object
+        - bq_project (string): BigQuery project name.
+        - medallion_layer (string): BigQuery medallion layer name.
 
     Returns:
         - meta_map (dict): A dictionary that organizes metadata tables by
@@ -168,14 +178,14 @@ def map_metadata(client, HTAN_BQ_PROJECT, MEDALLION_LAYER):
     """
 
     meta_map = {}
-    tables = client.list_tables(f'{HTAN_BQ_PROJECT}.{MEDALLION_LAYER}')
+    tables = client.list_tables(f'{bq_project}.{medallion_layer}')
     for table in tables:
         if table.table_id == "bronze_Manifests":
             continue
         current_table = table.table_id
         manifest_data = client.query(
             f"""SELECT *
-                FROM `{HTAN_BQ_PROJECT}.{MEDALLION_LAYER}.{current_table}`""") \
+                FROM `{bq_project}.{medallion_layer}.{current_table}`""") \
         .result().to_dataframe()
         try:
             component = manifest_data['Component'][0]
