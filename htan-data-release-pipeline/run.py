@@ -20,7 +20,7 @@ from medallion_architecture import bq_raw2bronze as r2b
 from medallion_architecture import bq_bronze2silver as b2s
 #from medallion_architecture import bq_silver2gold as s2g
 
-from workflow_functions import data_model_load
+from validators.htan_validation.utils import data_model_load
 
 def print_section(title):
     """

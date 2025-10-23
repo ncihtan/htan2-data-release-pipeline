@@ -47,6 +47,9 @@ For the complete standard operating procedure (SOP) for releasing HTAN data, ple
 ## Repository Structure
 ```
 ├── htan-data-release-pipeline/
+│   ├── client_functions/
+│   │   ├── bq_hashgenerator.py
+│   │   ├── client_load.py
 │   ├── configs/
 │   │   ├── configs.json
 │   │   ├── configs.yaml
@@ -69,12 +72,17 @@ For the complete standard operating procedure (SOP) for releasing HTAN data, ple
 │   │   ├── bq_silver2gold.py
 │   │   ├── README.md
 │   ├── utils/
-│   │   ├── data_utils.py
-│   ├── workflow_functions/
-│   │   ├── bq_validation.py
-│   │   ├── client_load.py
-│   │   ├── data_model_load.py
-│   │   ├── data_model_validation.py
+│   │   ├── bronze2silver_utils.py
+│   │   ├── raw2bronze_utils.py
+│   ├── validators/
+│   │   ├── htan_validation/
+│   │   │   ├── utils/
+│   │   │   │   ├── data_model_load.py
+│   │   │   ├── bq_validation.py
+│   │   │   ├── data_model_validation.py
+│   │   ├── LICENSE
+│   │   ├── README.md
+│   │   ├── setup.py
 │   ├── run.py
 |── Dockerfile
 ├── README.md (Current File)
