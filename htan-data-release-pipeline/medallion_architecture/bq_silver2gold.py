@@ -23,7 +23,7 @@ Modified By:  Yamina Katariya <ykatariy@systemsbiology.org>
 """
 
 import pandas as pd
-from workflow_functions.client_load import (
+from client_functions.client_load import (
     load_bq,
     init_bq_client)
 import requests
