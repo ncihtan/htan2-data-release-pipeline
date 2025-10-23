@@ -191,7 +191,7 @@ def main(HTAN_BQ_PROJECT, SILVER_LAYER, BRONZE_LAYER):
                          'md5', 'BQ_Hash'])
 
         # Load table to BigQuery
-        load_bq(client, HTAN_BQ_PROJECT, {SILVER_LAYER},
+        load_bq(client, HTAN_BQ_PROJECT, SILVER_LAYER,
                 f"silver_METADATA_TABLE_{current_table.split('_', 4)[3]}",
                 manifest_data)
 
