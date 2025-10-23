@@ -147,14 +147,14 @@ def main(HTAN_BQ_PROJECT, SILVER_LAYER, BRONZE_LAYER):
                                                      'Exclusion_Reason']],
                                      left_on='entityId', right_on='entityId',
                                      how='left')
-            # manifest_data = manifest_data.drop(['file_id_x',
-            #                                     'manifest_id_x',
-            #                                     'file_id_y',
-            #                                     'manifest_id_y'],
-            #                                     axis=1)
-            # manifest_data.rename(columns={'exclusion_reason_x': 'File_Removal_Reason',
-            #                             'exclusion_reason_y': 'Manifest_Removal_Reason'},
-            #                             inplace=True)
+            manifest_data = manifest_data.drop(['file_id_x',
+                                                'manifest_id_x',
+                                                'file_id_y',
+                                                'manifest_id_y'],
+                                                axis=1)
+            manifest_data.rename(columns={'exclusion_reason_x': 'File_Removal_Reason',
+                                        'exclusion_reason_y': 'Manifest_Removal_Reason'},
+                                        inplace=True)
 
             # Summary for file errors
             silver_manifests_all_errors = data_utils.combine_all_errors(
