@@ -9,7 +9,5 @@ project_id_mapping:
   '63298068': 'HTAN2_Prostate'
   '63298073': 'HTAN2_Colorectal'
   '63298076': 'HTAN2_Lymphoma'
-  '68754852': 'HTAN TEST1'
-  '68754879': 'HTAN TEST2'
-  '68754939': 'HTAN TEST3'
+  '70197818': 'HTAN CAT TEST'
   default: 'Unknown Project'
