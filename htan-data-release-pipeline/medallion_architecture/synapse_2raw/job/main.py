@@ -262,8 +262,8 @@ def main():
 
     # Destination
     project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "htan2-dcc")
-    dataset_id = os.getenv("BQ_DATASET", "synapse_raw")
-    table_id = os.getenv("BQ_TABLE", "synape_annotations_dyp")  # keep your existing name
+    dataset_id = os.getenv("BQ_DATASET", "htan2_synapse_raw")
+    table_id = os.getenv("BQ_TABLE", "raw_METADATA_annotations")  # keep your existing name
 
     # Query Snowflake
     conn = login_to_snowflake()
