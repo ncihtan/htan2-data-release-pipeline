@@ -22,7 +22,7 @@ import yaml
 
 from linkml.validator import validate_file
 from linkml_runtime.dumpers import yaml_dumper
-from workflow_functions.data_model_load import set_up_github_scrape
+from validators.htan_validation.utils.data_model_load import set_up_github_scrape
 
 def compare_to_data_model(data, module, name):
     """

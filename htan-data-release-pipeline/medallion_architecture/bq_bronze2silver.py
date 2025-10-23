@@ -28,7 +28,7 @@ import os
 import json
 import pandas as pd
 import yaml
-from workflow_functions.bq_validation import (
+from validators.htan_validation.bq_validation import (
     htan_id_unique,
     htan_id_regex,
     basename_regex,
@@ -37,11 +37,11 @@ from workflow_functions.bq_validation import (
     unique_demographics,
     parents_exist,
     get_channel_files)
-from workflow_functions.client_load import (
+from client_functions.client_load import (
     load_bq,
     init_synapse_client,
     init_bq_client)
-from utils import data_utils
+from utils import bronze2silver_utils as b2s_utils
 
 # ----------------------------------------
 #        MODULE-LEVEL CONFIGURATION
@@ -83,7 +83,7 @@ def main(HTAN_BQ_PROJECT, SILVER_LAYER, BRONZE_LAYER):
         FROM `{HTAN_BQ_PROJECT}.{BRONZE_LAYER}.bronze_INDEXING_TABLE_Upstream_IDs`""").result().to_dataframe()
 
     # Get manifest and file exclusion list
-    exclusion_list = data_utils.get_exclusion_list(client, HTAN_BQ_PROJECT, "release_exclusions")
+    exclusion_list = b2s_utils.get_exclusion_list(client, HTAN_BQ_PROJECT, "release_exclusions")
 
     load_bq(client,
             HTAN_BQ_PROJECT,
@@ -91,8 +91,8 @@ def main(HTAN_BQ_PROJECT, SILVER_LAYER, BRONZE_LAYER):
             'silver_INDEXING_TABLE_ExclusionList',
             exclusion_list)
 
-    meta_map = data_utils.map_metadata(client, HTAN_BQ_PROJECT, BRONZE_LAYER)
-    parent_ids = data_utils.get_parent_ids(meta_map)
+    meta_map = b2s_utils.map_metadata(client, HTAN_BQ_PROJECT, BRONZE_LAYER)
+    parent_ids = b2s_utils.get_parent_ids(meta_map)
     error_unique_demo = unique_demographics(meta_map, id_provenance_bronze)
     error_unique_bios = unique_bios(meta_map, id_provenance_bronze)
     error_adj_bios = adjacent_bios(meta_map, id_provenance_bronze)
@@ -118,26 +118,26 @@ def main(HTAN_BQ_PROJECT, SILVER_LAYER, BRONZE_LAYER):
             continue
 
         if "HTAN_Data_File_ID" in manifest_data.columns:
-            manifest_data = data_utils.merge_error_data(manifest_data,
+            manifest_data = b2s_utils.merge_error_data(manifest_data,
                                              error_unique_demo,
                                              'Error_Not_Unique_Demo')
-            manifest_data = data_utils.merge_error_data(manifest_data,
+            manifest_data = b2s_utils.merge_error_data(manifest_data,
                                              error_unique_bios,
                                              'Error_Not_Unique_Bios')
-            manifest_data = data_utils.merge_error_data(manifest_data,
+            manifest_data = b2s_utils.merge_error_data(manifest_data,
                                              error_adj_bios,
                                              'Error_Adjacent_Bios')
 
-            manifest_data = data_utils.merge_error_data(manifest_data,
+            manifest_data = b2s_utils.merge_error_data(manifest_data,
                                              htan_id_unique(manifest_data),
                                              'Error_Not_Unique_HTAN_ID')
-            manifest_data = data_utils.merge_error_data(manifest_data,
+            manifest_data = b2s_utils.merge_error_data(manifest_data,
                                              htan_id_regex(manifest_data),
                                              'Error_Ending_Not_Conform_HTAN_Standard')
-            manifest_data = data_utils.merge_error_data(manifest_data,
+            manifest_data = b2s_utils.merge_error_data(manifest_data,
                                              basename_regex(manifest_data),
                                              'Error_Basename_Not_Conform_HTAN_Standard')
-            manifest_data = data_utils.merge_error_data(manifest_data,
+            manifest_data = b2s_utils.merge_error_data(manifest_data,
                                              parents_exist(manifest_data, parent_ids),
                                              'Error_Parent_Not_Found')
 
@@ -157,7 +157,7 @@ def main(HTAN_BQ_PROJECT, SILVER_LAYER, BRONZE_LAYER):
                                         inplace=True)
 
             # Summary for file errors
-            silver_manifests_all_errors = data_utils.combine_all_errors(
+            silver_manifests_all_errors = b2s_utils.combine_all_errors(
                 manifest_data,
                 silver_manifests_all_errors,
                 ['Filename', 'entityId',
@@ -175,12 +175,12 @@ def main(HTAN_BQ_PROJECT, SILVER_LAYER, BRONZE_LAYER):
             channel = get_channel_files(syn, manifest_data[:5], 
                                         meta_map['ImagingLevel2'],
                                         center_map)
-            manifest_data = data_utils.merge_error_data(manifest_data,
+            manifest_data = b2s_utils.merge_error_data(manifest_data,
                                              channel[1],
                                              'Error_Channel_Metadata_Not_Found')
 
             # Summary for imaging errors
-            silver_manifests_all_errors = data_utils.combine_all_errors(
+            silver_manifests_all_errors = b2s_utils.combine_all_errors(
                         manifest_data,
                         silver_manifests_all_errors,
                         ['Filename', 'entityId',
