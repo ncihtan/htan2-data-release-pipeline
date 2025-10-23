@@ -40,14 +40,7 @@ from utils.data_utils import (
     sanitize_bq_name
 )
 
-
-# -----------------------
-# BQ Destinations
-# -----------------------
-HTAN_BQ_PROJECT = "htan2-dcc"
-MEDALLION_LAYER = "htan2_medallion_bronze"
-
-def main():
+def main(HTAN_BQ_PROJECT, MEDALLION_LAYER):
     """Process and load Synapse + HTAN2 data into BigQuery."""
 
     # Initialize clients
