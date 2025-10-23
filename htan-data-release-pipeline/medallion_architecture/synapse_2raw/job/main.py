@@ -247,16 +247,17 @@ def main():
     SELECT
       CONCAT('syn', nl.project_id) AS project_id,
       CASE nl.project_id
-      {case_block}
+        {case_block}
         ELSE '{default_value}'
       END AS project_name,
-      CONCAT('syn', nl.ID) AS entity_id,
-      nl.NAME,
+      CONCAT('syn', nl.id) AS entity_id,
+      CONCAT('syn', nl.parent_id) AS folder_id,
+      nl.name,
       nl.ANNOTATIONS:"annotations"."Component"."value"[0]::STRING AS component,
       nl.ANNOTATIONS AS annotations_json,
       ARRAY_SIZE(OBJECT_KEYS(nl.ANNOTATIONS:"annotations")) AS annotation_count
     FROM synapse_data_warehouse.synapse.node_latest nl
-    WHERE nl.PROJECT_ID IN ({", ".join(f"'{pid}'" for pid in in_ids)})
+    WHERE nl.project_id IN ({", ".join(f"{int(pid.replace('syn',''))}" for pid in in_ids)})
       AND nl.node_type = 'file'
     """
 
@@ -270,17 +271,18 @@ def main():
     results = run_snowflake_query(conn, snowflake_query)
     logging.info(f"Query returned {len(results)} rows.")
 
-    # Convert results to dicts for BQ
+    # Convert results to dicts for BigQuery
     results_dict = []
     for row in results:
         rec = {
             "project_id": row[0],
             "project_name": row[1],
             "entity_id": row[2],
-            "name": row[3],
-            "component": row[4],
-            "annotations": transform_annotations(row[5]),
-            "annotation_count": row[6],
+            "folder_id": row[3], 
+            "name": row[4],
+            "component": row[5],
+            "annotations": transform_annotations(row[6]),
+            "annotation_count": row[7],
         }
         results_dict.append(rec)
 
