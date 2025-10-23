@@ -12,7 +12,7 @@ Functions:
     - select_existing_columns(df: pd.DataFrame, cols: list[str])
     - merge_error_data(manifest_data, error_data, column_name)
     - combine_all_errors(manifest_data, error_df, columns)
-    - get_exclusion_list(client, HTAN_BQ_PROJECT, dataset)
+    - get_exclusion_list(client, bq_project, dataset)
     - get_parent_ids(meta_map)
     
 Author:       Yamina Katariya <ykatariy@systemsbiology.org>
