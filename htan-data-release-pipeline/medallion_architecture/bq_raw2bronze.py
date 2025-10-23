@@ -29,13 +29,13 @@ import json
 import pandas as pd
 import synapseclient as sc
 
-from workflow_functions.client_load import (
+from client_functions.client_load import (
     load_bq,
     init_bq_client,
     init_synapse_client,
 )
 
-from utils.data_utils import (
+from utils.raw2bronze_utils import (
     flatten_annotation_list,
     sanitize_bq_name
 )
