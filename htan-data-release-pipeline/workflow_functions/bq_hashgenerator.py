@@ -75,7 +75,7 @@ def main():
         job.result()  # Wait for completion
 
     else:
-        load_bq(client, 'htan2-dcc', 'synapse_raw', 'bq_hash_minting_table', annotated_files)
+        load_bq(client, 'htan2-dcc', 'htan2_synapse_raw', 'bq_hash_minting_table', annotated_files)
         
     
     
