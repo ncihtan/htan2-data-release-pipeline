@@ -281,7 +281,7 @@ def main():
             logging.info(f"  First annotation: {r['annotations'][0]}")
 
     #TEMPORARY FILTER
-    filtered_results = [
+    results_dict = [
         rec for rec in results_dict
         if rec.get("folder_id") == "syn70197818"]
     
