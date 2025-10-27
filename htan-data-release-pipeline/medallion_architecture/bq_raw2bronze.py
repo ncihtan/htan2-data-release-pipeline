@@ -40,7 +40,14 @@ from utils.data_utils import (
     sanitize_bq_name
 )
 
-def main(HTAN_BQ_PROJECT, MEDALLION_LAYER):
+
+# -----------------------
+# BQ Destinations
+# -----------------------
+HTAN_BQ_PROJECT = "htan2-dcc"
+MEDALLION_LAYER = "htan2_medallion_bronze"
+
+def main():
     """Process and load Synapse + HTAN2 data into BigQuery."""
 
     # Initialize clients
@@ -50,12 +57,12 @@ def main(HTAN_BQ_PROJECT, MEDALLION_LAYER):
     # Build per-component Manifest tables from synapse_raw annotations
     all_annotations = client.query(f"""
         SELECT * 
-        FROM `{HTAN_BQ_PROJECT}.synapse_raw.synape_annotations_dyp`
+        FROM `{HTAN_BQ_PROJECT}.htan2_synapse_raw.raw_METADATA_annotations`
     """).result().to_dataframe()
 
     components = sorted(all_annotations["component"].dropna().unique())
-    #Pull in BQ Hashing Table
-    bq_hash_table = client.query("""SELECT project_id, entity_id, name, value, BQ_hash FROM `htan2-dcc.synapse_raw.bq_hash_minting_table`""").result().to_dataframe()
+
+    bq_hash_table = client.query("""SELECT project_id, entity_id, name, value, BQ_hash FROM `htan2-dcc.htan2_synapse_raw.raw_INDEXING_hash_minting_table`""").result().to_dataframe()
     bq_hash_table = bq_hash_table.rename(columns={"value": "HTAN_Data_File_ID"})
     # Generating combined assay tables
     print("\nGenerating Combined Assay Tables...\n")
@@ -64,13 +71,9 @@ def main(HTAN_BQ_PROJECT, MEDALLION_LAYER):
 
         comp_annots = all_annotations[all_annotations["component"] == component]
         df_expanded = comp_annots["annotations"].apply(flatten_annotation_list).apply(pd.Series)
-        combined_assay_table = pd.concat([comp_annots.drop(columns="annotations"),df_expanded],
-                                         axis=1)
-        combined_assay_table = combined_assay_table.drop(columns=["component"],
-                                                         errors="ignore")
-        #Apply BQ Hashing based on entity ID and HTAN Data File ID
+        combined_assay_table = pd.concat([comp_annots.drop(columns="annotations"),df_expanded],axis=1)
+        combined_assay_table = combined_assay_table.drop(columns=["component"],errors="ignore")
         combined_assay_table = pd.merge(combined_assay_table, bq_hash_table,on=["entity_id", "HTAN_Data_File_ID"],how="inner")
-
         # Create BigQuery table schema (STRING by default; File_Size/Manifest_Version as integer)
         bq_schema = []
         for column_name, _ in combined_assay_table.dtypes.items():
@@ -93,7 +96,7 @@ def main(HTAN_BQ_PROJECT, MEDALLION_LAYER):
             table_name,
             combined_assay_table,
         )
-
+        
         # Pull & group selected Synapse tables (Demographics, Biospecimen)
         all_tables = syn.tableQuery("SELECT * FROM syn68830580").asDataFrame()
 
@@ -157,7 +160,7 @@ def main(HTAN_BQ_PROJECT, MEDALLION_LAYER):
             "Filename",
             "entity_id",
             "Component",
-            "project_name",
+            "project_name"
         ]
         if "HTAN_Parent_Biospecimen_ID" in cols:
             common_cols.append("HTAN_Parent_Biospecimen_ID")
