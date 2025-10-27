@@ -61,27 +61,18 @@ def main():
     #Login to BQ
     client = bigquery.Client()
     #Fetch all current annotated files
-    annotated_files = client.query("""SELECT project_id, entity_id, key, value, name  FROM `htan2-dcc.synapse_raw.synape_annotations_dyp`,
+    annotated_files = client.query("""SELECT project_id, entity_id, key, value, name  FROM `htan2-dcc.htan2_synapse_raw.raw_METADATA_annotations`,
                                    UNNEST(annotations) AS annotation_value
                                    WHERE key = 'HTAN_Data_File_ID' """).result().to_dataframe()
     annotated_files = annotated_files.explode("value", ignore_index=True)
     #Apply hashing
     annotated_files["BQ_Hash"] = annotated_files.apply(lambda row: mint_bq_hash(row["value"], row["entity_id"]),axis=1)
     #Post hashing table
-    if table_exists("htan2-dcc", "synapse_raw", "bq_hash_minting_table"):
+    if table_exists("htan2-dcc", "htan2_synapse_raw", "raw_INDEXING_hash_minting_table"):
         print("Table exists! Minting new values.")
         job_config = bigquery.LoadJobConfig(write_disposition=bigquery.WriteDisposition.WRITE_APPEND)
-        job = client.load_table_from_dataframe(annotated_files, "htan2-dcc.synapse_raw.bq_hash_minting_table", job_config=job_config)
+        job = client.load_table_from_dataframe(annotated_files, "htan2-dcc.htan2_synapse_raw.raw_INDEXING_hash_minting_table", job_config=job_config)
         job.result()  # Wait for completion
 
     else:
-        load_bq(client, 'htan2-dcc', 'synapse_raw', 'bq_hash_minting_table', annotated_files)
-        
-    
-    
-
-                                   
-
-    
-    
-    
+        load_bq(client, 'htan2-dcc', 'htan2_synapse_raw', 'raw_INDEXING_hash_minting_table', annotated_files)
