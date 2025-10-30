@@ -279,11 +279,6 @@ def main():
         logging.info(f"Sample row {i}: entity_id={r['entity_id']} component={r['component']} ann_keys={keys}")
         if r.get("annotations"):
             logging.info(f"  First annotation: {r['annotations'][0]}")
-
-    #TEMPORARY FILTER
-    results_dict = [
-        rec for rec in results_dict
-        if rec.get("folder_id") == "syn70197818"]
     
     # Load to BigQuery
     write_to_bigquery(results_dict, project_id, dataset_id, table_id)
