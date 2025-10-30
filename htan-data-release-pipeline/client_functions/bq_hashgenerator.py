@@ -25,7 +25,7 @@ def table_exists(project_id: str, dataset_id: str, table_id: str) -> bool:
     table_ref = f"{project_id}.{dataset_id}.{table_id}"
 
     try:
-        client.get_table(table_ref)  # Make an API request
+        client.get_table(table_ref)
         return True
     except NotFound:
         return False
@@ -61,17 +61,20 @@ def main():
     #Login to BQ
     client = bigquery.Client()
     #Fetch all current annotated files
-    annotated_files = client.query("""SELECT project_id, entity_id, key, value, name  FROM `htan2-dcc.htan2_synapse_raw.raw_METADATA_annotations`,
+    #FILES MUST TO HAVE AN HTAN_DATA_FILE_ID TO BE MINTED
+    annotated_files = client.query("""SELECT project_id, entity_id, key, value, name  FROM `htan2-dcc.htan2_synapse_raw.raw_METADATA_annotations_center_manual`,
                                    UNNEST(annotations) AS annotation_value
-                                   WHERE key = 'HTAN_Data_File_ID' """).result().to_dataframe()
+                                   WHERE key = 'HTAN_DATA_FILE_ID' """).result().to_dataframe()
     annotated_files = annotated_files.explode("value", ignore_index=True)
     #Apply hashing
     annotated_files["BQ_Hash"] = annotated_files.apply(lambda row: mint_bq_hash(row["value"], row["entity_id"]),axis=1)
     #Post hashing table
     if table_exists("htan2-dcc", "htan2_synapse_raw", "raw_INDEXING_hash_minting_table"):
         print("Table exists! Minting new values.")
+        full_hash_table = client.query(f"""SELECT * FROM `htan2-dcc.htan2_synapse_raw.raw_INDEXING_hash_minting_table`""").result().to_dataframe()
+        new_ids = annotated_files[~annotated_files['BQ_Hash'].isin(full_hash_table['BQ_Hash'])]
         job_config = bigquery.LoadJobConfig(write_disposition=bigquery.WriteDisposition.WRITE_APPEND)
-        job = client.load_table_from_dataframe(annotated_files, "htan2-dcc.htan2_synapse_raw.raw_INDEXING_hash_minting_table", job_config=job_config)
+        job = client.load_table_from_dataframe(new_ids, "htan2-dcc.htan2_synapse_raw.raw_INDEXING_hash_minting_table", job_config=job_config)
         job.result()  # Wait for completion
 
     else:
