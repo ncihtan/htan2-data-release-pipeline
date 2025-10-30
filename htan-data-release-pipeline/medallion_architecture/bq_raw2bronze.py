@@ -34,13 +34,10 @@ from client_functions.client_load import (
     init_bq_client,
     init_synapse_client,
 )
-
-from utils.raw2bronze_utils import (
+from raw2bronze_utils import (
     flatten_annotation_list,
     sanitize_bq_name
 )
-
-
 # -----------------------
 # BQ Destinations
 # -----------------------
@@ -49,31 +46,28 @@ MEDALLION_LAYER = "htan2_medallion_bronze"
 
 def main():
     """Process and load Synapse + HTAN2 data into BigQuery."""
-
     # Initialize clients
     syn = init_synapse_client()
     client = init_bq_client()
-
     # Build per-component Manifest tables from synapse_raw annotations
     all_annotations = client.query(f"""
-        SELECT * 
-        FROM `{HTAN_BQ_PROJECT}.htan2_synapse_raw.raw_METADATA_annotations`
+    SELECT * FROM `{HTAN_BQ_PROJECT}.htan2_synapse_raw.raw_METADATA_annotations_center_manual`
     """).result().to_dataframe()
-
+    #----------------------------------------------------------------------------------------------------
     components = sorted(all_annotations["component"].dropna().unique())
-
-    bq_hash_table = client.query("""SELECT project_id, entity_id, name, value, BQ_hash FROM `htan2-dcc.htan2_synapse_raw.raw_INDEXING_hash_minting_table`""").result().to_dataframe()
-    bq_hash_table = bq_hash_table.rename(columns={"value": "HTAN_Data_File_ID"})
+    #----------------------------------------------------------------------------------------------------
+    bq_hash_table = client.query("""SELECT value, entity_id, BQ_hash FROM `htan2-dcc.htan2_synapse_raw.raw_INDEXING_hash_minting_table`""").result().to_dataframe()
+    bq_hash_table = bq_hash_table.rename(columns={"value": "HTAN_DATA_FILE_ID"})
+    #----------------------------------------------------------------------------------------------------
     # Generating combined assay tables
     print("\nGenerating Combined Assay Tables...\n")
     for component in components:
         table_name = f"bronze_METADATA_TABLE_Manifest_{component}"
-
         comp_annots = all_annotations[all_annotations["component"] == component]
         df_expanded = comp_annots["annotations"].apply(flatten_annotation_list).apply(pd.Series)
         combined_assay_table = pd.concat([comp_annots.drop(columns="annotations"),df_expanded],axis=1)
-        combined_assay_table = combined_assay_table.drop(columns=["component"],errors="ignore")
-        combined_assay_table = pd.merge(combined_assay_table, bq_hash_table,on=["entity_id", "HTAN_Data_File_ID"],how="inner")
+        #combined_assay_table = combined_assay_table.drop(columns=["component"],errors="ignore")
+        combined_assay_table = pd.merge(combined_assay_table, bq_hash_table,on=["entity_id", "HTAN_DATA_FILE_ID"],how="inner")
         # Create BigQuery table schema (STRING by default; File_Size/Manifest_Version as integer)
         bq_schema = []
         for column_name, _ in combined_assay_table.dtypes.items():
@@ -82,13 +76,12 @@ def main():
                 "type": "STRING" if column_name not in ["File_Size",
                                                         "Manifest_Version"] else "integer",
             })
-
         # Make column names BigQuery-friendly
         combined_assay_table.columns = combined_assay_table.columns.str \
             .replace(r"[^0-9a-zA-Z]+","_", regex=True)
-
+        
+        combined_assay_table.columns = combined_assay_table.columns.str.upper()
         print("\n Processing:", table_name, "\n")
-
         load_bq(
             client,
             HTAN_BQ_PROJECT,
@@ -96,13 +89,11 @@ def main():
             table_name,
             combined_assay_table,
         )
-        
+        #----------------------------------------------------------------------------------------------------
         # Pull & group selected Synapse tables (Demographics, Biospecimen)
-        all_tables = syn.tableQuery("SELECT * FROM syn68830580").asDataFrame()
-
+        all_tables = syn.tableQuery("SELECT * FROM syn70777865").asDataFrame()
         # WILL NEED TO BE UPDATED ONCE REAL DATA IS SUBMITTED!!!
-        include_list = ["Demographics", "Biospecimen"]
-
+        include_list = ["Biospecimen", "Demographics", "FollowUp"]
         filtered_tables = all_tables[all_tables["name"].str.contains(
             "|".join(include_list),
             na=False)]
@@ -125,6 +116,7 @@ def main():
         # Upload grouped dataframes to BigQuery
         for name, df in grouped_dataframes.items():
             out_table = f"bronze_METADATA_TABLE_Manifest_{name.replace(' ', '_').replace('-', '_')}"
+            df.columns = df.columns.str.upper()
             load_bq(
                 client,
                 HTAN_BQ_PROJECT,
@@ -132,7 +124,7 @@ def main():
                 out_table,
                 df,
             )
-
+    #----------------------------------------------------------------------------------------------------
     # File ancestry walker → upstream IDs table
     bios = client.query(f"""
         SELECT * FROM `{HTAN_BQ_PROJECT}.{MEDALLION_LAYER}.bronze_LINKING_VIEW_Biospecimen`
@@ -148,26 +140,24 @@ def main():
     f = pd.DataFrame()
     for t in table_list:
         tn = t.table_id
-        if tn not in ["OtherAssay", "ExSeqMinimal"] and "Auxiliary" not in tn and "Level" not in tn:
+        if "Level" not in tn:
             continue
 
         print("\n Processing:", tn, "\n")
-
         cols = list(all_columns[all_columns["table_name"] == tn]["column_name"])
-
         common_cols = [
-            "HTAN_Data_File_ID",
-            "Filename",
-            "entity_id",
-            "Component",
-            "project_name"
+            "HTAN_DATA_FILE_ID",
+            "FILENAME",
+            "ENTITY_ID",
+            "COMPONENT",
+            "PROJECT_NAME"
         ]
-        if "HTAN_Parent_Biospecimen_ID" in cols:
-            common_cols.append("HTAN_Parent_Biospecimen_ID")
-        if "HTAN_Parent_Data_File_ID" in cols:
-            common_cols.append("HTAN_Parent_Data_File_ID")
-        if "HTAN_Data_File_ID" in cols:
-            common_cols.append("BQ_Hash")
+        if "HTAN_PARENT_BIOSPECIMEN_ID" in cols:
+            common_cols.append("HTAN_PARENT_BIOSPECIMEN_ID")
+        if "HTAN_PARENT_DATA_FILE_ID" in cols:
+            common_cols.append("HTAN_PARENT_DATA_FILE_ID")
+        if "HTAN_DATA_FILE_ID" in cols:
+            common_cols.append("BQ_HASH")
 
         df = client.query(f"""
             SELECT {", ".join(common_cols)}
@@ -177,10 +167,10 @@ def main():
         f = pd.concat([f, df], ignore_index=True)
 
     # Expand comma/semicolon-separated parent lists into individual rows
-    f = f.assign(HTAN_Parent_Data_File_ID=f.HTAN_Parent_Data_File_ID.str \
-                 .split("[,;]")).explode("HTAN_Parent_Data_File_ID")
-    f = f.assign(HTAN_Parent_Biospecimen_ID=f.HTAN_Parent_Biospecimen_ID.str \
-                 .split("[,;]")).explode("HTAN_Parent_Biospecimen_ID")
+    f = f.assign(HTAN_PARENT_DATA_FILE_ID=f.HTAN_PARENT_DATA_FILE_ID.str \
+                 .split("[,;]")).explode("HTAN_PARENT_DATA_FILE_ID")
+    f = f.assign(HTAN_PARENT_BIOSPECIMEN_ID=f.HTAN_PARENT_BIOSPECIMEN_ID.str \
+                 .split("[,;]")).explode("HTAN_PARENT_BIOSPECIMEN_ID")
     f = f.applymap(lambda x: x.strip() if isinstance(x, str) else x).drop_duplicates()
 
     print("\nGenerating Upstream and Linking Tables...\n")
@@ -188,67 +178,67 @@ def main():
     # Self-joins to walk parent → grandparent → great-grandparent
     f = (
         f.merge(
-            f[["HTAN_Data_File_ID", "HTAN_Parent_Data_File_ID"]],
-            left_on="HTAN_Parent_Data_File_ID",
-            right_on="HTAN_Data_File_ID",
+            f[["HTAN_DATA_FILE_ID", "HTAN_PARENT_DATA_FILE_ID"]],
+            left_on="HTAN_PARENT_DATA_FILE_ID",
+            right_on="HTAN_DATA_FILE_ID",
             how="left",
         )
         .drop_duplicates()
         .rename(columns={
-            "HTAN_Parent_Data_File_ID_y": "gParent_File_ID",
-            "HTAN_Parent_Data_File_ID_x": "HTAN_Parent_Data_File_ID",
-            "HTAN_Data_File_ID_x": "HTAN_Data_File_ID",
+            "HTAN_PARENT_DATA_FILE_ID_y": "gParent_File_ID",
+            "HTAN_PARENT_DATA_FILE_ID_x": "HTAN_PARENT_DATA_FILE_ID",
+            "HTAN_DATA_FILE_ID_x": "HTAN_DATA_FILE_ID",
         })
-        .drop(columns="HTAN_Data_File_ID_y")
+        .drop(columns="HTAN_DATA_FILE_ID_y")
         .merge(
-            f[["HTAN_Data_File_ID", "HTAN_Parent_Data_File_ID"]],
+            f[["HTAN_DATA_FILE_ID", "HTAN_PARENT_DATA_FILE_ID"]],
             left_on="gParent_File_ID",
-            right_on="HTAN_Data_File_ID",
+            right_on="HTAN_DATA_FILE_ID",
             how="left",
         )
         .drop_duplicates()
         .rename(columns={
-            "HTAN_Data_File_ID_x": "HTAN_Data_File_ID",
-            "HTAN_Parent_Data_File_ID_y": "ggParent_File_ID",
-            "HTAN_Parent_Data_File_ID_x": "HTAN_Parent_Data_File_ID",
+            "HTAN_DATA_FILE_ID_x": "HTAN_DATA_FILE_ID",
+            "HTAN_PARENT_DATA_FILE_ID_y": "ggParent_File_ID",
+            "HTAN_PARENT_DATA_FILE_ID_x": "HTAN_PARENT_DATA_FILE_ID",
         })
-        .drop(columns="HTAN_Data_File_ID_y")
+        .drop(columns="HTAN_DATA_FILE_ID_y")
     )
 
     # Coalesce 'highest' level parent data file
     f["coalesce"] = f[["ggParent_File_ID",
                        "gParent_File_ID",
-                       "HTAN_Parent_Data_File_ID"]].bfill(axis=1).iloc[:, 0]
+                       "HTAN_PARENT_DATA_FILE_ID"]].bfill(axis=1).iloc[:, 0]
 
     # Map highest-available ancestor to its biospecimen
     f = (
         f.merge(
-            f[["HTAN_Data_File_ID", "HTAN_Parent_Biospecimen_ID"]],
+            f[["HTAN_DATA_FILE_ID", "HTAN_PARENT_BIOSPECIMEN_ID"]],
             left_on="coalesce",
-            right_on="HTAN_Data_File_ID",
+            right_on="HTAN_DATA_FILE_ID",
             how="left",
         )
         .drop_duplicates()
-        .assign(HTAN_Parent_Biospecimen_ID_x=lambda x: x["HTAN_Parent_Biospecimen_ID_x"] \
-                .fillna(x["HTAN_Parent_Biospecimen_ID_y"]))
+        .assign(HTAN_PARENT_BIOSPECIMEN_ID_x=lambda x: x["HTAN_PARENT_BIOSPECIMEN_ID_x"] \
+                .fillna(x["HTAN_PARENT_BIOSPECIMEN_ID_y"]))
         .rename(columns={
-            "HTAN_Data_File_ID_x": "HTAN_Data_File_ID",
-            "HTAN_Parent_Biospecimen_ID_x": "HTAN_Assayed_Biospecimen_ID",
+            "HTAN_DATA_FILE_ID_x": "HTAN_DATA_FILE_ID",
+            "HTAN_PARENT_BIOSPECIMEN_ID_x": "HTAN_ASSAYED_BIOSPECIMEN_ID",
         })
         .drop(columns=[
-            "HTAN_Data_File_ID_y",
+            "HTAN_DATA_FILE_ID_y",
             "gParent_File_ID",
             "coalesce",
-            "HTAN_Parent_Biospecimen_ID_y",
+            "HTAN_PARENT_BIOSPECIMEN_ID_y",
             "ggParent_File_ID",
         ])
     )
 
     # Join file table with biospecimen walker table
     id_prov = (
-        f.merge(bios, on="HTAN_Assayed_Biospecimen_ID", how="left")
+        f.merge(bios, on="HTAN_ASSAYED_BIOSPECIMEN_ID", how="left")
          .drop_duplicates()
-         .rename(columns={"fileEntityId": "entity_id"})
+         .rename(columns={"fileEntityId": "ENTITY_ID"})
     )
 
     # Load upstream IDs
@@ -260,16 +250,21 @@ def main():
         id_prov,
         json.load(open("configs/schema.json")),
     )
-
+    #----------------------------------------------------------------------------------------------------
     # Unique IDs (Datafile / Participant)
     unique_ids_minted_datafiles = (
-        id_prov[["entity_id", "HTAN_Data_File_ID", "project_name", "BQ_Hash"]]
-        .drop_duplicates("HTAN_Data_File_ID")
+        id_prov[["ENTITY_ID", "HTAN_DATA_FILE_ID", "PROJECT_NAME", "BQ_HASH"]]
+        .drop_duplicates("HTAN_DATA_FILE_ID")
         .dropna()
     )
     unique_ids_minted_patients = (
-        id_prov[["entity_id", "HTAN_Participant_ID", "project_name"]]
-        .drop_duplicates("HTAN_Participant_ID")
+        id_prov[["HTAN_PARTICIPANT_ID", "PROJECT_NAME"]]
+        .drop_duplicates("HTAN_PARTICIPANT_ID")
+        .dropna()
+    )
+    unique_ids_minted_biospecimen = (
+        id_prov[["HTAN_ASSAYED_BIOSPECIMEN_ID", "HTAN_ORIGINATING_BIOSPECIMEN_ID", "PROJECT_NAME"]]
+        .drop_duplicates(["HTAN_ASSAYED_BIOSPECIMEN_ID", "HTAN_ORIGINATING_BIOSPECIMEN_ID"])
         .dropna()
     )
     load_bq(
@@ -286,8 +281,14 @@ def main():
         "bronze_INDEXING_TABLE_Minted_Participant_IDs",
         unique_ids_minted_patients,
     )
-
-
+    load_bq(
+        client,
+        HTAN_BQ_PROJECT,
+        MEDALLION_LAYER,
+        "bronze_INDEXING_TABLE_Minted_Biospecimen_IDs",
+        unique_ids_minted_biospecimen,
+    )
+    #----------------------------------------------------------------------------------------------------
 
 if __name__ == "__main__":
     main()
