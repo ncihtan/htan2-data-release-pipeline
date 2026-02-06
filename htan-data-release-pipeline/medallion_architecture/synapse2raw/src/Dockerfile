@@ -1,7 +1,6 @@
 FROM --platform=linux/amd64 python:3.11-slim
 
-RUN apt-get update 
-RUN apt install curl -y 
+RUN apt-get update && apt-get install -y curl
 
 ENV PATH=/google-cloud-sdk/bin:$PATH
 
@@ -13,10 +12,11 @@ RUN export CLOUD_SDK_VERSION="410.0.0" && \
 
 WORKDIR /app
 
-COPY requirements.txt /app
-COPY main.py /app
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-RUN pip3 install --no-cache-dir --upgrade \
-    -r /app/requirements.txt
+# Copy the *entire src directory* (this is the key)
+COPY src/ /app/
 
-CMD ["python3","main.py"]
+CMD ["python", "main.py"]
