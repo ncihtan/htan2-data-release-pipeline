@@ -12,11 +12,9 @@ RUN export CLOUD_SDK_VERSION="410.0.0" && \
 
 WORKDIR /app
 
-# Install dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the *entire src directory* (this is the key)
-COPY src/ /app/
+COPY . /app
 
 CMD ["python", "main.py"]
