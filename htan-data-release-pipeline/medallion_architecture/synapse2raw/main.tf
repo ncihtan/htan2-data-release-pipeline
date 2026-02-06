@@ -25,7 +25,7 @@ resource "google_cloud_run_v2_job" "default" {
             }
            }
            env {
-             name = "SYNAPSE_AUTH_TOKEN"
+             name = "SYNAPSE_AUTH_TOKEN_RAW"
              value_source {
                secret_key_ref {
                  secret  = var.secret_id
