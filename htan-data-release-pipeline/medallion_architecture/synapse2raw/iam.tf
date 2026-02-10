@@ -5,7 +5,7 @@ data "google_project" "project" {
 resource "google_service_account" "sa" {
   project = var.project_id
   account_id = var.account_id
-  display_name = "Service Account used by Cloud Run Job to update BigQuery metadata tables"
+  display_name = "Primary service account used for BQ medallion architecture."
 }
 
 resource "google_project_iam_member" "sa_bigquery_editor" {
