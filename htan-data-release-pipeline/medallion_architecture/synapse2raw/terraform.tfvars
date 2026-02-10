@@ -1,19 +1,19 @@
 project_id = "htan-dcc"
 region = "us-east1"
-image_url = "us-docker.pkg.dev/htan-dcc/gcr.io/syn-bq-metadata:latest"
-secret_id = "synapse_service_pat" 
+image_url = "us-docker.pkg.dev/htan-dcc/gcr.io/synapse2raw:latest"
+secret_id = "synapse_dyp_secret" 
 
 # service account variables
 google_service_account = {
   sa = {
-    email = "bq-metadata@htan-dcc.iam.gserviceaccount.com"
+    email = "bq-medallion-jobs@htan-dcc.iam.gserviceaccount.com"
   }
 }
-account_id = "bq-metadata"
+account_id = "bq_medallion_jobs"
 
 # job variables
-cloud_run_name = "update-bq-metadata-tables"
-job_name =  "update-bq-metadata-tables-trigger"
-job_description = "Updates metadata tables in 'combined_assays' BigQuery dataset"
-job_schedule = "0 2 * * *"
-time_zone = "America/New_York"
+cloud_run_name = "synapse2raw"
+job_name =  "synapse2raw"
+job_description = "Update raw metadata pulled from Synapse in Google Bigquery (htan2-dcc)."
+job_schedule = "0 3 * * *"
+time_zone = "America/Oregon"
