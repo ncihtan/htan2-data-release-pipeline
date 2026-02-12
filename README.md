@@ -1,5 +1,5 @@
 <p align="center" style="background-color: #040104">
-  <img src="./htan-data-release-pipeline/images/HTAN_banner.jpg" />
+  <img src="./htan2-data-release-pipeline/images/HTAN_banner.jpg" />
 </p>
 
 <a id="introduction"></a>
