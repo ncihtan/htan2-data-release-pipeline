@@ -1,7 +1,6 @@
-FROM python:3.11-slim
+FROM --platform=linux/amd64 python:3.11-slim
 
-RUN apt-get update -y
-RUN apt install curl -y 
+RUN apt-get update && apt-get install -y curl
 
 ENV PATH=/google-cloud-sdk/bin:$PATH
 
@@ -13,8 +12,9 @@ RUN export CLOUD_SDK_VERSION="410.0.0" && \
 
 WORKDIR /app
 
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
 COPY . /app
 
-RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt
-
-CMD ["python3","htan-data-release-pipeline/run.py"]
+CMD ["python3", "main.py"]

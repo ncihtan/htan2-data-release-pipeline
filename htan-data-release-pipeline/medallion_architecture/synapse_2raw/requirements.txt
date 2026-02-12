@@ -1,7 +1,0 @@
-snowflake-connector-python
-google-cloud-bigquery
-google-cloud-secret-manager
-python-dotenv
-synapseclient
-pandas
-pyyaml
