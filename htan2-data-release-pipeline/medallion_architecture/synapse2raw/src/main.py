@@ -332,7 +332,7 @@ def main() -> None:
             project_name=project_name,
             entity_type=EntityViewType.FOLDER,
             parent_id=HTAN_DEV,
-            add_annotation_columns=True,
+            add_annotation_columns=False,
         )
 
         file_view_id = ensure_entity_view(
@@ -341,7 +341,7 @@ def main() -> None:
             project_name=project_name,
             entity_type=EntityViewType.FILE,
             parent_id=HTAN_DEV,
-            add_annotation_columns=True,
+            add_annotation_columns=False,
         )
 
         phase2_centers.at[i, "Folderview_EntityId"] = folder_view_id
