@@ -106,25 +106,18 @@ def data_frames_from_config(binding_dictionary: Dict[str, Any]) -> pd.DataFrame:
             )
     return pd.DataFrame(project_rows)
 
-
 def ensure_entity_view(
     syn,
     project_id: str,
     project_name: str,
     entity_type: EntityViewType,
     parent_id: str,
-    add_annotation_columns: bool,) -> Optional[str]:
+    add_annotation_columns: bool):
     """
-    Create or reuse a Synapse EntityView (FolderView or FileView).
+    Create OR UPDATE a Synapse EntityView (FolderView or FileView).
     """
     try:
-        existing_views = list(syn.getChildren(parent_id, includeTypes=["entityview"]))
         view_name = f"{project_name}_{entity_type.name.capitalize()}View"
-
-        for child in existing_views:
-            if child.get("name") == view_name:
-                log.info("View exists, skipping: %s (%s)", view_name, child.get("id"))
-                return child.get("id")
 
         view = EntityViewSchema(
             name=view_name,
@@ -137,12 +130,18 @@ def ensure_entity_view(
 
         view = syn.store(view)
         log.info("Created %s for %s: %s", f"{entity_type.name}View", project_name, view.id)
+
         return view.id
 
     except Exception as e:
-        log.exception("%sView failed for %s (%s): %s", entity_type.name, project_name, project_id, e)
+        log.exception(
+            "%sView failed for %s (%s): %s",
+            entity_type.name,
+            project_name,
+            project_id,
+            e,
+        )
         return None
-
 
 def count_view_rows(syn, view_id: Optional[str], label: str) -> int:
     if not view_id or pd.isna(view_id):
