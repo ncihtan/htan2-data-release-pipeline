@@ -50,34 +50,40 @@ def init_bq_client():
 
     return bigquery.Client()
 
-def load_bq(client, project, dataset, table, data, schema=None):
+def load_bq(client, project, dataset, table, data, schema=None, write_mode="truncate"):
     """
     Load table into BigQuery.
 
     Args:
-        - client (BigQuery instance): BigQuery client.
-        - project (string): BigQuery project name.
-        - dataset (string): BigQuery dataset name.
-        - table (string): BigQuery table name.
-        - data (pandas.DataFrame): Data to be loaded into BigQuery.
-        - schema (dict): The schema of the data being loaded into Big Query.
-        
+        client: BigQuery client
+        project: GCP project
+        dataset: dataset name
+        table: table name
+        data: pandas DataFrame
+        schema: optional schema
+        write_mode: "truncate", "append", or "empty"
     """
 
     table_bq = f"{project}.{dataset}.{table}"
-    print(f"Loading {table_bq} to BigQuery")
+    print(f"Loading {table_bq} to BigQuery (mode={write_mode})")
 
-    # Make column names BigQuery friendly
-    data.columns = data.columns.str.replace(
-       '[^0-9a-zA-Z]+','_', regex=True)
+    # Clean column names
+    data.columns = data.columns.str.replace('[^0-9a-zA-Z]+', '_', regex=True)
 
-    # If no schema is provided, generate a default schema with STRING type
+    # Default schema
     if schema is None:
         schema = [bigquery.SchemaField(name, 'STRING') for name in data.columns]
 
+    # Map write mode → BigQuery disposition
+    write_map = {
+        "truncate": "WRITE_TRUNCATE",
+        "append": "WRITE_APPEND",
+        "empty": "WRITE_EMPTY"
+    }
+
     job_config = bigquery.LoadJobConfig(
         schema=schema,
-        write_disposition="WRITE_TRUNCATE",
+        write_disposition=write_map.get(write_mode, "WRITE_TRUNCATE"),
         autodetect=False,
         allow_jagged_rows=True,
         allow_quoted_newlines=True,
@@ -87,6 +93,9 @@ def load_bq(client, project, dataset, table, data, schema=None):
     job = client.load_table_from_dataframe(
         data, table_bq, job_config=job_config
     )
+
+    job.result()  # wait for completion
+    print(f"Loaded {len(data)} rows into {table_bq}")
 
 def get_description(attribute, schema, add_descriptions):
     """
