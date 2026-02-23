@@ -54,18 +54,17 @@ def main() -> None:
     client = init_bq_client()
 
     registry_table = "bronze_INDEXING_TABLE_BQ_Hash_File_ID_Registry"
-
     #Check if hash table exists-----------------------------
     try:
         registry_df = client.query(f"""
-            SELECT BQ_Hash_ID, HTAN_Data_File_ID, Synapse_EntityId
+            SELECT BQ_Hash_ID, HTAN_DATA_FILE_ID, Synapse_EntityId
             FROM `{HTAN_BQ_PROJECT}.{MEDALLION_LAYER}.{registry_table}`
         """).to_dataframe()
         print(f"Loaded {len(registry_df)} existing IDs")
     except Exception:
         print("Registry not found — initializing new registry")
         registry_df = pd.DataFrame(columns=[
-            "BQ_Hash_ID", "HTAN_Data_File_ID", "Synapse_EntityId"
+            "BQ_Hash_ID", "HTAN_DATA_FILE_ID", "Synapse_EntityId", "First_Seen", "Source_Component"
         ])
 
     #Load up source tables-----------------------------
@@ -78,8 +77,13 @@ def main() -> None:
         SELECT *
         FROM `htan2-dcc.htan2_synapse_raw.raw_INDEXING_TABLE_All_Records_Annotation_Fileview_Source`
     """).result().to_dataframe()
-
     
+    only_valid_files = client.query("""
+        SELECT *
+        FROM `htan2-dcc.htan2_synapse_raw.raw_INDEXING_TABLE_All_Files_With_Validation_Status`
+        WHERE Is_Valid = "True"
+    """).result().to_dataframe()
+
 #File Metadata Processing
     component_dfs = defaultdict(list)
 
@@ -98,7 +102,7 @@ def main() -> None:
             component_dfs[component].append(df)
         except Exception as e:
             print(f"Failed querying {annotation_view_id}: {e}")
-
+    
     stacked_by_component = {
         component: pd.concat(dfs, ignore_index=True)
         for component, dfs in component_dfs.items()
@@ -137,33 +141,32 @@ def main() -> None:
 
         print(f"Processing {component} ({len(df):,} rows)")
         df = df.rename(columns=rename_map)
+        df = df[df["File_EntityId"].isin(only_valid_files["File_EntityId"])]
 
-        htan_cols = [
-            "HTAN_Data_File_ID"
-        ]
+        htan_cols = ["HTAN_DATA_FILE_ID"]
         htan_col = next((c for c in htan_cols if c in df.columns), None)
 
         if htan_col is None:
             df["BQ_Hash_ID"] = None
         else:
-            df["HTAN_Data_File_ID"] = df[htan_col].astype(str)
+            df["HTAN_DATA_FILE_ID"] = df[htan_col].astype(str)
             df["Synapse_EntityId"] = df["File_EntityId"].astype(str)
 
             df = df.merge(
                 registry_df,
                 how="left",
-                on=["HTAN_Data_File_ID", "Synapse_EntityId"]
+                on=["HTAN_DATA_FILE_ID", "Synapse_EntityId"]
             )
 
             needs_id = df["BQ_Hash_ID"].isna()
 
             df.loc[needs_id, "BQ_Hash_ID"] = df.loc[needs_id].apply(
-                lambda r: mint_bq_hash(r["HTAN_Data_File_ID"], r["Synapse_EntityId"]),
+                lambda r: mint_bq_hash(r["HTAN_DATA_FILE_ID"], r["Synapse_EntityId"]),
                 axis=1
             )
 
             new_registry_rows = df.loc[needs_id, [
-                "BQ_Hash_ID", "HTAN_Data_File_ID", "Synapse_EntityId"
+                "BQ_Hash_ID", "HTAN_DATA_FILE_ID", "Synapse_EntityId"
             ]].drop_duplicates()
 
             if not new_registry_rows.empty:
@@ -228,12 +231,6 @@ def main() -> None:
         )
 
     #Valid Files Table----------------
-    only_valid_files = client.query("""
-        SELECT *
-        FROM `htan2-dcc.htan2_synapse_raw.raw_INDEXING_TABLE_All_Files_With_Validation_Status`
-        WHERE Is_Valid = "True"
-    """).result().to_dataframe()
-
     load_bq(
         client,
         HTAN_BQ_PROJECT,
