@@ -141,7 +141,6 @@ def main() -> None:
 
         print(f"Processing {component} ({len(df):,} rows)")
         df = df.rename(columns=rename_map)
-        df = df[df["File_EntityId"].isin(only_valid_files["File_EntityId"])]
 
         htan_cols = ["HTAN_DATA_FILE_ID"]
         htan_col = next((c for c in htan_cols if c in df.columns), None)
@@ -183,6 +182,7 @@ def main() -> None:
                 )
 
         df = df[["BQ_Hash_ID"] + [c for c in df.columns if c != "BQ_Hash_ID"]]
+        df = df[df["File_EntityId"].isin(only_valid_files["File_EntityId"])]        
 
         load_bq(
             client,
