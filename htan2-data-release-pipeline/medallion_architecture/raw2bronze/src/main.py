@@ -12,6 +12,7 @@ Updated: 2026-02-09
 """
 
 import pandas as pd
+import numpy as np
 import hashlib
 import base64
 from collections import defaultdict
@@ -36,10 +37,21 @@ log = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------------------
 # Helpers
-def mint_bq_hash(htan_id: str, synapse_id: str,
-                 namespace: str = "HTAN", version: str = "v1",
-                 length: int = 16) -> str:
-    if not htan_id or not synapse_id:
+def mint_bq_hash(
+    htan_id: str,
+    synapse_id: str,
+    namespace: str = "HTAN",
+    version: str = "v1",
+    length: int = 16):
+    
+    if htan_id is None or synapse_id is None:
+        return None
+
+    htan_id = str(htan_id).strip()
+    synapse_id = str(synapse_id).strip()
+
+    if (htan_id == "" or synapse_id == ""
+        or htan_id.lower() == "nan" or synapse_id.lower() == "nan"):
         return None
 
     payload = f"{namespace}|{version}|{htan_id}|{synapse_id}".encode("utf-8")
@@ -84,6 +96,7 @@ def main() -> None:
         WHERE Is_Valid = "True"
     """).result().to_dataframe()
 
+    
 #File Metadata Processing
     component_dfs = defaultdict(list)
 
@@ -107,7 +120,7 @@ def main() -> None:
         component: pd.concat(dfs, ignore_index=True)
         for component, dfs in component_dfs.items()
     }
-
+    #Adjust column names
     rename_map = {
         "id": "File_EntityId",
         "name": "File_Name",
@@ -134,30 +147,47 @@ def main() -> None:
         "schema_isValid": "Schema_Is_Valid",
         "schema_errors": "Schema_Validation_Errors"
     }
-
+    #Loop through all tables and stack them by component into one table
     for component, df in stacked_by_component.items():
-        component_safe = component.replace("-", "_").replace(" ", "_")
-        table_name = f"bronze_METADATA_TABLE_All_Files_{component_safe}"
+    
+        # Special handling for scRNA Level 3 and 4
+        if component == "scRNALevel3and4":
+            split_components = ["scRNALevel3", "scRNALevel4"]
+        else:
+            split_components = [component]
+    
+        for comp in split_components:
+            component_safe = comp.replace("-", "_").replace(" ", "_")
+            table_name = f"bronze_METADATA_TABLE_All_Files_{component_safe}"
 
         print(f"Processing {component} ({len(df):,} rows)")
         df = df.rename(columns=rename_map)
-
+        #Apply BQ hashing
         htan_cols = ["HTAN_DATA_FILE_ID"]
         htan_col = next((c for c in htan_cols if c in df.columns), None)
 
         if htan_col is None:
-            df["BQ_Hash_ID"] = None
+            pass
         else:
             df["HTAN_DATA_FILE_ID"] = df[htan_col].astype(str)
             df["Synapse_EntityId"] = df["File_EntityId"].astype(str)
-
+            
             df = df.merge(
                 registry_df,
                 how="left",
-                on=["HTAN_DATA_FILE_ID", "Synapse_EntityId"]
-            )
-
-            needs_id = df["BQ_Hash_ID"].isna()
+                on=["HTAN_DATA_FILE_ID", "Synapse_EntityId"])
+            
+            has_htan = (
+                df["HTAN_DATA_FILE_ID"].notna()
+                & df["HTAN_DATA_FILE_ID"].astype(str).str.strip().ne("")
+                & df["HTAN_DATA_FILE_ID"].astype(str).str.lower().ne("nan"))
+            
+            has_syn = (
+                df["Synapse_EntityId"].notna()
+                & df["Synapse_EntityId"].astype(str).str.strip().ne("")
+                & df["Synapse_EntityId"].astype(str).str.lower().ne("nan"))
+            
+            needs_id = df["BQ_Hash_ID"].isna() & has_htan & has_syn
 
             df.loc[needs_id, "BQ_Hash_ID"] = df.loc[needs_id].apply(
                 lambda r: mint_bq_hash(r["HTAN_DATA_FILE_ID"], r["Synapse_EntityId"]),
@@ -166,7 +196,7 @@ def main() -> None:
 
             new_registry_rows = df.loc[needs_id, [
                 "BQ_Hash_ID", "HTAN_DATA_FILE_ID", "Synapse_EntityId"
-            ]].drop_duplicates()
+            ]].drop_duplicates().replace('nan', np.nan).dropna(subset=['BQ_Hash_ID'])
 
             if not new_registry_rows.empty:
                 new_registry_rows["First_Seen"] = datetime.utcnow()
@@ -181,8 +211,10 @@ def main() -> None:
                     write_mode="append"
                 )
 
-        df = df[["BQ_Hash_ID"] + [c for c in df.columns if c != "BQ_Hash_ID"]]
-        df = df[df["File_EntityId"].isin(only_valid_files["File_EntityId"])]        
+            df = df[["BQ_Hash_ID"] + [c for c in df.columns if c != "BQ_Hash_ID"]]
+        
+        #Retain only valid files (validated by the data model)
+        df = df[df["File_EntityId"].isin(only_valid_files["File_EntityId"])]
 
         load_bq(
             client,
