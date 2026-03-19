@@ -178,11 +178,9 @@ def get_validation_summary(syn, entity_id: str) -> Dict[str, Any]:
         }
 
         if not val.get("isValid", True):
-            messages = [r.get("message", "") for r in val.get("validationResults", [])]
-            messages = [m for m in messages if m]
             result["is_valid"] = False
-            result["validation_error_message"] = messages[0] if messages else ""
-            result["all_validation_messages"] = "; ".join(messages)
+            result["validation_error_message"] = val.get("validationErrorMessage")
+            result["all_validation_messages"] = val.get("allValidationMessages")
 
         return result
 
@@ -521,7 +519,7 @@ def main() -> None:
     #Include folder schema information in file validation table--------------------------------------------
     subset_schema_status_df = schema_status_df[["Folder_EntityId", "Status_Folder_Name", "Component", "Bound_Schema_Name", "Schema_Version"]]
 
-    big_fileview_df = big_fileview_df.merge(subset_schema_status_df, on="Folder_EntityId", how="left")
+    big_fileview_df = big_fileview_df.merge(subset_schema_status_df, on="Folder_EntityId", how="inner")
     
     #Load BQ Table----------------------------------------------------------------------------------------
     load_bq(
