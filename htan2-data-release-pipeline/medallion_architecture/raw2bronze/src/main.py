@@ -17,6 +17,9 @@ import hashlib
 import base64
 from collections import defaultdict
 from datetime import datetime
+from synapseclient.models import RecordSet
+import tempfile
+
 import os
 import logging
 from client_load import (
@@ -59,7 +62,6 @@ def mint_bq_hash(
     token = base64.urlsafe_b64encode(digest).decode("utf-8").rstrip("=")
     return token[:length]
 
-
 def main() -> None:
     # Instantiate clients
     syn = init_synapse_client()
@@ -84,19 +86,20 @@ def main() -> None:
         SELECT *
         FROM `htan2-dcc.htan2_synapse_raw.raw_INDEXING_TABLE_All_Files_Annotation_Fileview_Source`
     """).result().to_dataframe()
+    
+    all_file_validations = client.query("""
+        SELECT *
+        FROM `htan2-dcc.htan2_synapse_raw.raw_INDEXING_TABLE_All_Files_With_Validation_Status`
+    """).result().to_dataframe()
+    
+    subset_file_validations = all_file_validations[["File_EntityId", "Is_Valid", "Validated_On", "Validation_Error_Message", "All_Validation_Error_Messages"]]
 
     all_record_annotations = client.query("""
         SELECT *
-        FROM `htan2-dcc.htan2_synapse_raw.raw_INDEXING_TABLE_All_Records_Annotation_Fileview_Source`
-    """).result().to_dataframe()
-    
-    only_valid_files = client.query("""
-        SELECT *
-        FROM `htan2-dcc.htan2_synapse_raw.raw_INDEXING_TABLE_All_Files_With_Validation_Status`
-        WHERE Is_Valid = "True"
+        FROM `htan2-dcc.htan2_synapse_raw.raw_INDEXING_TABLE_All_RecordSets_With_Validation_Status`
     """).result().to_dataframe()
 
-    
+
 #File Metadata Processing
     component_dfs = defaultdict(list)
 
@@ -212,9 +215,8 @@ def main() -> None:
                 )
 
             df = df[["BQ_Hash_ID"] + [c for c in df.columns if c != "BQ_Hash_ID"]]
+            df = df.merge(subset_file_validations, on = "File_EntityId", how="inner")
         
-        #Retain only valid files (validated by the data model)
-        df = df[df["File_EntityId"].isin(only_valid_files["File_EntityId"])]
 
         load_bq(
             client,
@@ -224,29 +226,68 @@ def main() -> None:
             df
         )
 
-    #Do the same for Records----------------
+    #Process records next in a similar manner using the API commands for Record sets----------------
     component_dfs_records = defaultdict(list)
 
     for _, row in all_record_annotations.iterrows():
-        annotation_view_id = row.get("Annotation_EntityId")
-        component = row.get("Component")
-
-        if pd.isna(annotation_view_id):
+        record_view_id = row.get("Record_EntityId")
+        if pd.isna(record_view_id):
             continue
-
+        component = row.get("Component")
+        rs_meta = syn.get(record_view_id, downloadFile=False)
+        validation_fh_id = getattr(rs_meta, "validationFileHandleId", None)
+        
         try:
-            df = syn.tableQuery(f"SELECT * FROM {annotation_view_id}").asDataFrame()
-            df["HTAN_Center"] = row["HTAN_Center"]
-            df["Folder_EntityId"] = row["Folder_EntityId"]
-            df["Component"] = component
-            component_dfs_records[component].append(df)
+            #Download the RecordSet CSV itself
+            with tempfile.TemporaryDirectory() as tmpdir:
+                rs = RecordSet(id=record_view_id, path=tmpdir).get()
+                data_df = pd.read_csv(rs.path).reset_index(drop=True)
+            
+            #Get RecordSet metadata and validation file handle
+            rs_meta = syn.get(record_view_id, downloadFile=False)
+            validation_fh_id = getattr(rs_meta, "validationFileHandleId", None)
+            
+            if not validation_fh_id:
+                raise ValueError(
+                    f"RecordSet {record_view_id} has no validationFileHandleId"
+                )
+            
+            #Download the validation CSV
+            validation_info = syn._getFileHandleDownload(
+                fileHandleId=validation_fh_id,
+                objectId=record_view_id,
+                objectType="FileEntity")
+            
+            #Pull out the local file path
+            validation_path = validation_info['preSignedURL']
+
+            
+            if not validation_path:
+                raise ValueError(f"Could not determine validation file path from: {validation_info}")
+            
+            validation_df = pd.read_csv(validation_path)
+                        
+            # 5) Join by row number
+            data_df = data_df.reset_index().rename(columns={"index": "row_index"})
+            merged_df = data_df.merge(validation_df, on="row_index", how="left")
+            
+            merged_df = merged_df.rename(columns={'is_valid': 'Validation_Passed', 
+                                            'validation_error_message': 'Validation_Error_Message',
+                                            'all_validation_messages': 'All_Validation_Messages'
+                                            })
+
+            merged_df["HTAN_Center"] = row["HTAN_Center"]
+            merged_df["Folder_EntityId"] = row["Folder_EntityId"]
+            merged_df["Component"] = component
+                        
+            component_dfs_records[component].append(merged_df)
+            
         except Exception as e:
-            print(f"Failed querying {annotation_view_id}: {e}")
+            print(f"Failed downloading {record_view_id}: {e}")
 
     stacked_by_component_records = {
         component: pd.concat(dfs, ignore_index=True)
-        for component, dfs in component_dfs_records.items()
-    }
+        for component, dfs in component_dfs_records.items()}
 
     for component, df in stacked_by_component_records.items():
         component_safe = component.replace("-", "_").replace(" ", "_")
@@ -261,16 +302,6 @@ def main() -> None:
             table_name,
             df
         )
-
-    #Valid Files Table----------------
-    load_bq(
-        client,
-        HTAN_BQ_PROJECT,
-        MEDALLION_LAYER,
-        "bronze_INDEXING_TABLE_Valid_Files_With_Schema_Information",
-        only_valid_files
-    )
-
 
 if __name__ == "__main__":
     main()
