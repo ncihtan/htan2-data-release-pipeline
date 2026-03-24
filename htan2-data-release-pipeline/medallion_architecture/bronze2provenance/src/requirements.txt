@@ -4,3 +4,5 @@ google-cloud-bigquery>=3.17
 google-auth>=2.29
 google-cloud-storage>=2.16
 db-dtypes>=1.2
+synapseclient>=2.7
+PyYAML>=6.0
