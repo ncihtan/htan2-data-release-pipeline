@@ -12,8 +12,8 @@ google_service_account = {
 account_id = "bq_medallion_jobs"
 
 # job variables
-cloud_run_name = "raw2bronze"
-job_name =  "raw2bronze"
-job_description = "Update bronze metadata pulled from raw data in Google Bigquery (htan2-dcc)."
+cloud_run_name = "bronze2provenance"
+job_name =  "bronze2provenance"
+job_description = "Update bronze provenance metadata table constructed from raw data in Google Bigquery (htan2-dcc)."
 job_schedule = "0 6 * * *"
 time_zone = "America/Oregon"
