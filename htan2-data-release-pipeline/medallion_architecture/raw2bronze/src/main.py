@@ -8,7 +8,7 @@ Requires (env):
 - BQ_DATASET (defaults to 'htan2_synapse_bronze')
 
 Authors: Dar'ya Pozhidayeva
-Updated: 2026-02-09
+Updated: 2026-03-24
 """
 
 import pandas as pd
@@ -98,7 +98,6 @@ def main() -> None:
         SELECT *
         FROM `htan2-dcc.htan2_synapse_raw.raw_INDEXING_TABLE_All_RecordSets_With_Validation_Status`
     """).result().to_dataframe()
-
 
 #File Metadata Processing
     component_dfs = defaultdict(list)
@@ -260,7 +259,6 @@ def main() -> None:
             
             #Pull out the local file path
             validation_path = validation_info['preSignedURL']
-
             
             if not validation_path:
                 raise ValueError(f"Could not determine validation file path from: {validation_info}")
