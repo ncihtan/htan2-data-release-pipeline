@@ -1,6 +1,6 @@
-project_id = "htan-dcc"
+project_id = "htan2-dcc"
 region = "us-east1"
-image_url = "us-docker.pkg.dev/htan-dcc/gcr.io/raw2bronze:latest"
+image_url = "us-docker.pkg.dev/htan2-dcc/gcr.io/bronze2provenance:latest"
 secret_id = "synapse_dyp_secret" 
 
 # service account variables
@@ -15,5 +15,5 @@ account_id = "bq_medallion_jobs"
 cloud_run_name = "bronze2provenance"
 job_name =  "bronze2provenance"
 job_description = "Update bronze provenance metadata table constructed from raw data in Google Bigquery (htan2-dcc)."
-job_schedule = "0 6 * * *"
+job_schedule = "0 7 * * *"
 time_zone = "America/Oregon"
