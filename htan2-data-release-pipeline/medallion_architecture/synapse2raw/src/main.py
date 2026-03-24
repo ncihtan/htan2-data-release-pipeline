@@ -15,7 +15,7 @@ Requires (env):
   - SCHEMA_BINDING_CONFIG_URL (defaults to htan2_project_setup raw URL)
 
 Authors: Dar'ya Pozhidayeva
-Updated: 2025-08-20
+Updated: 2025-03-24
 """
 
 from __future__ import annotations
