@@ -87,7 +87,7 @@ def main() -> None:
 
     all_record_annotations = client.query("""
         SELECT *
-        FROM `htan2-dcc.htan2_synapse_raw.raw_INDEXING_TABLE_All_Records_Annotation_Source`
+        FROM `htan2-dcc.htan2_synapse_raw.raw_INDEXING_TABLE_All_Records_Annotation_Fileview_Source`
     """).result().to_dataframe()
     
     only_valid_files = client.query("""
