@@ -15,7 +15,7 @@ Requires (env):
   - SCHEMA_BINDING_CONFIG_URL (defaults to htan2_project_setup raw URL)
 
 Authors: Dar'ya Pozhidayeva
-Updated: 2025-08-20
+Updated: 2025-03-24
 """
 
 from __future__ import annotations
@@ -62,12 +62,11 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 log = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------------------
-# Helpers
+# Helper Functions
 def http_get_text(url: str, timeout: int = HTTP_TIMEOUT) -> str:
     r = requests.get(url, timeout=timeout)
     r.raise_for_status()
     return r.text
-
 
 def syn_rest_get(syn, path: str) -> Dict[str, Any]:
     """
@@ -83,11 +82,9 @@ def syn_rest_get(syn, path: str) -> Dict[str, Any]:
             time.sleep(sleep_s)
     raise last_err  # type: ignore[misc]
 
-
 def safe_contains(series: pd.Series, pattern: str, flags: int = re.IGNORECASE) -> pd.Series:
     s = series.fillna("").astype(str)
     return s.str.contains(pattern, flags=flags, regex=True)
-
 
 #--------------------------------------------------------------------------------------
 #Core Functions Needed
@@ -129,7 +126,7 @@ def ensure_entity_view(
         )
 
         view = syn.store(view)
-        log.info("Created %s for %s: %s", f"{entity_type.name}View", project_name, view.id)
+        log.info("Touched %s for %s: %s", f"{entity_type.name}View", project_name, view.id)
 
         return view.id
 
@@ -181,11 +178,9 @@ def get_validation_summary(syn, entity_id: str) -> Dict[str, Any]:
         }
 
         if not val.get("isValid", True):
-            messages = [r.get("message", "") for r in val.get("validationResults", [])]
-            messages = [m for m in messages if m]
             result["is_valid"] = False
-            result["validation_error_message"] = messages[0] if messages else ""
-            result["all_validation_messages"] = "; ".join(messages)
+            result["validation_error_message"] = val.get("validationErrorMessage")
+            result["all_validation_messages"] = val.get("allValidationMessages")
 
         return result
 
@@ -295,12 +290,13 @@ def fetch_all_projects(syn) -> pd.DataFrame:
 
     return pd.DataFrame(all_projects)
 
-
+#MAIN PROGRAM-------------------------------------------------------------------------------------
 def main() -> None:
     #Instantiate the relevant clients
     syn = init_synapse_client()
     client = init_bq_client()
-
+    
+    #Create all center table by establishing fileviews/folderviews (if needed)
     all_centers = fetch_all_projects(syn)
 
     if all_centers.empty or "name" not in all_centers.columns:
@@ -367,9 +363,8 @@ def main() -> None:
         phase2_centers,
     )
     
-    # Construct ALL file view ----------------------------------------------------------------------------------------  
+    # Construct ALL file view table ----------------------------------------------------------------------------------------  
     big_fileview_df = collect_all_fileviews(syn, phase2_centers, view_col="Fileview_EntityId")
-    
     
     rename_map = {
         "id": "File_EntityId",
@@ -398,6 +393,7 @@ def main() -> None:
         "All_Validation_Error_Messages": "All_Validation_Error_Messages",
         "Validated_On": "Validated_On",
     }
+    
     if not big_fileview_df.empty:
         big_fileview_df = big_fileview_df.rename(columns=rename_map)
         
@@ -504,15 +500,13 @@ def main() -> None:
     else:
         Component = pd.DataFrame(columns=["Folder_EntityId", "Component"])
 
-
     #Load BQ Table----------------------------------------------------------------------------------------
     load_bq(
         client,
         HTAN_BQ_PROJECT,
         MEDALLION_LAYER,
         "raw_INDEXING_TABLE_All_Folders_With_Bound_Schemas",
-        schema_status_df,
-    )
+        schema_status_df)
     
     #Load BQ Table----------------------------------------------------------------------------------------
     load_bq(
@@ -520,13 +514,12 @@ def main() -> None:
         HTAN_BQ_PROJECT,
         MEDALLION_LAYER,
         "raw_INDEXING_TABLE_All_Folders_Without_Bound_Schemas",
-        schema_errors_df,
-    )
+        schema_errors_df)
     
     #Include folder schema information in file validation table--------------------------------------------
     subset_schema_status_df = schema_status_df[["Folder_EntityId", "Status_Folder_Name", "Component", "Bound_Schema_Name", "Schema_Version"]]
 
-    big_fileview_df = big_fileview_df.merge(subset_schema_status_df, on="Folder_EntityId", how="left")
+    big_fileview_df = big_fileview_df.merge(subset_schema_status_df, on="Folder_EntityId", how="inner")
     
     #Load BQ Table----------------------------------------------------------------------------------------
     load_bq(
@@ -534,16 +527,16 @@ def main() -> None:
         HTAN_BQ_PROJECT,
         MEDALLION_LAYER,
         "raw_INDEXING_TABLE_All_Files_With_Validation_Status",
-        big_fileview_df,
-    )
+        big_fileview_df)
     
-    #Create and push annotation fileviews based on config provided by Aditi Gopalan----------------------------------------------------------------------------------------
+    #Create and push annotation fileviews and Record Sets based on config provided Sage Bionetworks (Aditi Gopalan)-------------------------------------------------------------
     config_text = http_get_text(SCHEMA_BINDING_CONFIG_URL)
     config = yaml.safe_load(config_text) or {}
 
     file_schema_bindings = (config.get("schema_bindings", {}) or {}).get("file_based", {}) or {}
     record_schema_bindings = (config.get("schema_bindings", {}) or {}).get("record_based", {}) or {}
 
+    #Load record sets and validation information-------------------------------------------------------------------
     files = data_frames_from_config(file_schema_bindings)
     if not files.empty:
         files = files[files["HTAN_Center"].isin(phase2_centers["HTAN_Center"])].copy()
@@ -553,6 +546,15 @@ def main() -> None:
         files[["Status_Folder_Name", "SubFolder_Layer1", "SubFolder_Layer2", "SubFolder_Layer3"]] = split_cols.iloc[:, :4]
         files = files.merge(Component, on="Folder_EntityId", how="left")
 
+    #Load BQ Table----------------------------------------------------------------------------------------
+    load_bq(
+        client,
+        HTAN_BQ_PROJECT,
+        MEDALLION_LAYER,
+        "raw_INDEXING_TABLE_All_Files_Annotation_Fileview_Source",
+        files)
+
+    #Load record sets and validation information----------------------------------------------------------------------------------------
     records = data_frames_from_config(record_schema_bindings)
     if not records.empty:
         records = records[records["HTAN_Center"].isin(phase2_centers["HTAN_Center"])].copy()
@@ -561,24 +563,59 @@ def main() -> None:
             split_cols[split_cols.shape[1]] = None
         records[["Status_Folder_Name", "SubFolder_Layer1", "SubFolder_Layer2"]] = split_cols.iloc[:, :3]
         records = records.merge(Component, on="Folder_EntityId", how="left")
-
-    #Load BQ Table----------------------------------------------------------------------------------------
-    load_bq(
-        client,
-        HTAN_BQ_PROJECT,
-        MEDALLION_LAYER,
-        "raw_INDEXING_TABLE_All_Files_Annotation_Fileview_Source",
-        files,
-    )
-    #Load BQ Table----------------------------------------------------------------------------------------
-    load_bq(
-        client,
-        HTAN_BQ_PROJECT,
-        MEDALLION_LAYER,
-        "raw_INDEXING_TABLE_All_Records_Annotation_Fileview_Source",
-        records,
-    )
-
+        records.rename(columns={"Annotation_EntityId": "Record_EntityId"}, inplace=True)
+        
+        #Load BQ Table----------------------------------------------------------------------------------------
+        load_bq(
+            client,
+            HTAN_BQ_PROJECT,
+            MEDALLION_LAYER,
+            "raw_INDEXING_TABLE_All_Records_Annotation_Source",
+            records)
+        
+        #Add more information to the same table and push as another table with similar but distinct information
+        records["Number_Valid_Rows"] = None
+        records["Total_Rows"] = None
+        records["Manifest_Percent_Valid"] = None
+        records["Manifest_Version"] = None
+        records["Modified_On"] = None
+        
+        for idx, row in records.iterrows():
+            record_set_id = row.get("Record_EntityId")
+        
+            if pd.isna(record_set_id):
+                continue
+        
+            try:
+                rs = syn.get(record_set_id, downloadFile=False)
+                version = rs.get("versionLabel")
+                date_modified = rs.get("modifiedOn")
+                validation_summary = getattr(rs, "validationSummary", None) or {}
+        
+                number_valid = validation_summary.get("numberOfValidChildren")
+                total_rows = validation_summary.get("totalNumberOfChildren")
+        
+                records.at[idx, "Number_Valid_Rows"] = number_valid
+                records.at[idx, "Total_Rows"] = total_rows
+                records.at[idx, "Version_Label"] = version
+                records.at[idx, "Modified_On"] = date_modified
+        
+                if pd.notna(total_rows) and total_rows != 0 and pd.notna(number_valid):
+                    records.at[idx, "Manifest_Percent_Valid"] = (number_valid / total_rows) * 100
+        
+            except Exception as e:
+                print(f"Failed {record_set_id}: {e}")
+        
+        record_subset_schema_status_df = schema_status_df[["Folder_EntityId","Bound_Schema_Name", "Schema_Version"]]
+        records = records.merge(record_subset_schema_status_df, on="Folder_EntityId", how="left")
+        
+        #Load BQ Table----------------------------------------------------------------------------------------
+        load_bq(
+            client,
+            HTAN_BQ_PROJECT,
+            MEDALLION_LAYER,
+            "raw_INDEXING_TABLE_All_RecordSets_With_Validation_Status",
+            records)
 
 if __name__ == "__main__":
     main()
