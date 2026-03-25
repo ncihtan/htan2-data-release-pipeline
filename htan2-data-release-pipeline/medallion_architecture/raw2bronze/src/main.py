@@ -152,11 +152,8 @@ def main() -> None:
     #Loop through all tables and stack them by component into one table
     for component, df in stacked_by_component.items():
     
-        # Special handling for scRNA Level 3 and 4
-        if component == "scRNALevel3and4":
-            split_components = ["scRNALevel3", "scRNALevel4"]
-        else:
-            split_components = [component]
+        # Remove splitting of scRNA-seq in components; variable name remains the same.
+        split_components = [component]
     
         for comp in split_components:
             component_safe = comp.replace("-", "_").replace(" ", "_")
