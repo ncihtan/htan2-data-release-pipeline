@@ -92,12 +92,14 @@ def main() -> None:
         FROM `htan2-dcc.htan2_synapse_raw.raw_INDEXING_TABLE_All_Files_With_Validation_Status`
     """).result().to_dataframe()
     
-    subset_file_validations = all_file_validations[["File_EntityId", "Is_Valid", "Validated_On", "Validation_Error_Message", "All_Validation_Error_Messages"]]
+    subset_file_validations = all_file_validations[["File_EntityId", "Is_Valid", "Validated_On", "Validation_Error_Message", "All_Validation_Error_Messages", "Schema_Version"]]
 
     all_record_annotations = client.query("""
         SELECT *
         FROM `htan2-dcc.htan2_synapse_raw.raw_INDEXING_TABLE_All_RecordSets_With_Validation_Status`
     """).result().to_dataframe()
+
+    subset_record_annotations = all_record_annotations[["Record_EntityId", "Folder_EntityId", "Schema_Version"]]
 
 #File Metadata Processing
     component_dfs = defaultdict(list)
@@ -276,7 +278,8 @@ def main() -> None:
             merged_df["HTAN_Center"] = row["HTAN_Center"]
             merged_df["Folder_EntityId"] = row["Folder_EntityId"]
             merged_df["Component"] = component
-                        
+            merged_df["Record_EntityId"] = record_view_id
+            merged_df = merged_df.merge(subset_record_annotations, on = ["Record_EntityId", "Folder_EntityId"], how="inner")
             component_dfs_records[component].append(merged_df)
             
         except Exception as e:
