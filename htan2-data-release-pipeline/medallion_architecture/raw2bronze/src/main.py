@@ -212,6 +212,8 @@ def main() -> None:
 
             df = df[["BQ_Hash_ID"] + [c for c in df.columns if c != "BQ_Hash_ID"]]
             df = df.merge(subset_file_validations, on = "File_EntityId", how="inner")
+            #If all columns are NULL in the table; drop row.
+            df = df.dropna(how="all")
         
 
         load_bq(
@@ -289,6 +291,8 @@ def main() -> None:
         table_name = f"bronze_METADATA_TABLE_All_Records_{component_safe}"
 
         df = df.rename(columns=rename_map)
+        #If all columns are NULL in the table; drop row.
+        df = df.dropna(how="all")
 
         load_bq(
             client,
