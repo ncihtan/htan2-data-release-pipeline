@@ -92,14 +92,14 @@ def main() -> None:
         FROM `htan2-dcc.htan2_synapse_raw.raw_INDEXING_TABLE_All_Files_With_Validation_Status`
     """).result().to_dataframe()
     
-    subset_file_validations = all_file_validations[["File_EntityId", "Is_Valid", "Validated_On", "Validation_Error_Message", "All_Validation_Error_Messages", "Schema_Version"]]
+    subset_file_validations = all_file_validations[["File_EntityId", "Is_Valid", "Validated_On", "Validation_Error_Message", "All_Validation_Error_Messages"]]
 
     all_record_annotations = client.query("""
         SELECT *
         FROM `htan2-dcc.htan2_synapse_raw.raw_INDEXING_TABLE_All_RecordSets_With_Validation_Status`
     """).result().to_dataframe()
-
-    subset_record_annotations = all_record_annotations[["Record_EntityId", "Folder_EntityId", "Schema_Version"]]
+    
+    subset_record_validations = all_record_annotations[["HTAN_Center", "Folder_EntityId", "Record_EntityId", "Folder_Source_Path", "Status_Folder_Name", "Component", "Modified_On", "Version_Label", "Bound_Schema_Name", "Schema_Version"]]
 
 #File Metadata Processing
     component_dfs = defaultdict(list)
@@ -215,8 +215,7 @@ def main() -> None:
             df = df[["BQ_Hash_ID"] + [c for c in df.columns if c != "BQ_Hash_ID"]]
             df = df.merge(subset_file_validations, on = "File_EntityId", how="inner")
             #If all columns are NULL in the table; drop row.
-            df = df.dropna(how="all")
-        
+            df = df.dropna(how="all")        
 
         load_bq(
             client,
@@ -279,7 +278,6 @@ def main() -> None:
             merged_df["Folder_EntityId"] = row["Folder_EntityId"]
             merged_df["Component"] = component
             merged_df["Record_EntityId"] = record_view_id
-            merged_df = merged_df.merge(subset_record_annotations, on = ["Record_EntityId", "Folder_EntityId"], how="inner")
             component_dfs_records[component].append(merged_df)
             
         except Exception as e:
@@ -303,6 +301,23 @@ def main() -> None:
             MEDALLION_LAYER,
             table_name,
             df
+        )
+        
+    #Migrate version of raw table to bronze for silver indexing
+    load_bq(
+            client,
+            HTAN_BQ_PROJECT,
+            MEDALLION_LAYER,
+            "bronze_INDEXING_TABLE_All_Files_With_Schema_Information",
+            all_file_validations
+        )
+    
+    load_bq(
+            client,
+            HTAN_BQ_PROJECT,
+            MEDALLION_LAYER,
+            "bronze_INDEXING_TABLE_All_RecordSets_With_Schema_Information",
+            subset_record_validations
         )
 
 if __name__ == "__main__":
