@@ -2,13 +2,15 @@
 # -*- coding: utf-8 -*-
 """
 Medallion Architecture: Raw to Bronze
+Script pulls in all files with bound schemas from the raw layer in BQ.
+Transforms metadata from files into stacked component assay tables with curator validation information.
 
 Requires (env):
 - GOOGLE_CLOUD_PROJECT (defaults to 'htan2-dcc')
 - BQ_DATASET (defaults to 'htan2_synapse_bronze')
 
 Authors: Dar'ya Pozhidayeva
-Updated: 2026-03-24
+Updated: 2026-03-31
 """
 
 import pandas as pd
@@ -215,15 +217,16 @@ def main() -> None:
             df = df[["BQ_Hash_ID"] + [c for c in df.columns if c != "BQ_Hash_ID"]]
             df = df.merge(subset_file_validations, on = "File_EntityId", how="inner")
             #If all columns are NULL in the table; drop row.
-            df = df.dropna(how="all")        
-
-        load_bq(
-            client,
-            HTAN_BQ_PROJECT,
-            MEDALLION_LAYER,
-            table_name,
-            df
-        )
+            df = df.dropna(how="all")
+            df = df.drop(columns=['Synapse_EntityId'])
+        
+            load_bq(
+                client,
+                HTAN_BQ_PROJECT,
+                MEDALLION_LAYER,
+                table_name,
+                df
+            )
 
     #Process records next in a similar manner using the API commands for Record sets----------------
     component_dfs_records = defaultdict(list)
@@ -294,6 +297,7 @@ def main() -> None:
         df = df.rename(columns=rename_map)
         #If all columns are NULL in the table; drop row.
         df = df.dropna(how="all")
+        df = df.drop(columns=['row_index'])
 
         load_bq(
             client,
