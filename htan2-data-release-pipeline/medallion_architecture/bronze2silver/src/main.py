@@ -1,247 +1,226 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Medallion Architecture: Raw to Bronze
-
-Requires (env):
-- GOOGLE_CLOUD_PROJECT (defaults to 'htan2-dcc')
-- BQ_DATASET (defaults to 'htan2_synapse_bronze')
-
-Authors: Dar'ya Pozhidayeva
-Updated: 2026-02-09
+Medallion Architecture: Bronze to Silver
 """
 
-import pandas as pd
-import hashlib
-import base64
-from collections import defaultdict
-from datetime import datetime
 import os
-import logging
+import shutil
+import pandas as pd
+from validators.component_validator import HTANComponentValidator
 from client_load import (
     load_bq,
     init_bq_client,
-    init_synapse_client,
+    init_synapse_client
+)
+from model_load import (
+    download_model,
+    convert_json_to_df
 )
 
-# --------------------------------------------------------------------------------------
-# Settings (env-overridable)
-HTAN_BQ_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT", "htan2-dcc")
-MEDALLION_LAYER = os.getenv("BQ_DATASET", "htan2_medallion_bronze")
+#####################################################
+#             SETTING GLOBAL VARIABLES
+#####################################################
 
-# --------------------------------------------------------------------------------------
-#Set Logging
-logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
-log = logging.getLogger(__name__)
+PROJECT = "htan2-dcc"
+RAW_DATASET = "htan2_synapse_raw"
+BRONZE_DATASET = "htan2_medallion_bronze"
+SILVER_DATASET = "htan2_medallion_silver"
 
-# --------------------------------------------------------------------------------------
-# Helpers
-def mint_bq_hash(htan_id: str, synapse_id: str,
-                 namespace: str = "HTAN", version: str = "v1",
-                 length: int = 16) -> str:
-    if not htan_id or not synapse_id:
-        return None
+#####################################################
+#                 HELPER FUNCTIONS
+#####################################################
 
-    payload = f"{namespace}|{version}|{htan_id}|{synapse_id}".encode("utf-8")
-    digest = hashlib.sha256(payload).digest()
-    token = base64.urlsafe_b64encode(digest).decode("utf-8").rstrip("=")
-    return token[:length]
+def query_bigquery_table(client, project_id, dataset_id, table_id):
+    """
+    Get an entire table from BigQuery as a Pandas DataFrame.
 
-
-def main() -> None:
-    # Instantiate clients
-    syn = init_synapse_client()
-    client = init_bq_client()
-
-    registry_table = "bronze_INDEXING_TABLE_BQ_Hash_File_ID_Registry"
-
-    #Check if hash table exists-----------------------------
-    try:
-        registry_df = client.query(f"""
-            SELECT BQ_Hash_ID, HTAN_Data_File_ID, Synapse_EntityId
-            FROM `{HTAN_BQ_PROJECT}.{MEDALLION_LAYER}.{registry_table}`
-        """).to_dataframe()
-        print(f"Loaded {len(registry_df)} existing IDs")
-    except Exception:
-        print("Registry not found — initializing new registry")
-        registry_df = pd.DataFrame(columns=[
-            "BQ_Hash_ID", "HTAN_Data_File_ID", "Synapse_EntityId"
-        ])
-
-    #Load up source tables-----------------------------
-    all_file_annotations = client.query("""
-        SELECT *
-        FROM `htan2-dcc.htan2_synapse_raw.raw_INDEXING_TABLE_All_Files_Annotation_Fileview_Source`
-    """).result().to_dataframe()
-
-    all_record_annotations = client.query("""
-        SELECT *
-        FROM `htan2-dcc.htan2_synapse_raw.raw_INDEXING_TABLE_All_Records_Annotation_Fileview_Source`
-    """).result().to_dataframe()
-
+    Args:
+        - client (BigQuery instance): A BigQuery client object.
+        - project_id (str): BigQuery project name.
+        - dataset_id (str): BigQuery dataset name.
+        - table_id (str): BigQuery table name.
     
-#File Metadata Processing
-    component_dfs = defaultdict(list)
-
-    for _, row in all_file_annotations.iterrows():
-        annotation_view_id = row.get("Annotation_EntityId")
-        component = row.get("Component")
-
-        if pd.isna(annotation_view_id):
-            continue
-
-        try:
-            df = syn.tableQuery(f"SELECT * FROM {annotation_view_id}").asDataFrame()
-            df["HTAN_Center"] = row["HTAN_Center"]
-            df["Folder_EntityId"] = row["Folder_EntityId"]
-            df["Component"] = component
-            component_dfs[component].append(df)
-        except Exception as e:
-            print(f"Failed querying {annotation_view_id}: {e}")
-
-    stacked_by_component = {
-        component: pd.concat(dfs, ignore_index=True)
-        for component, dfs in component_dfs.items()
-    }
-
-    rename_map = {
-        "id": "File_EntityId",
-        "name": "File_Name",
-        "parentId": "Parent_EntityId",
-        "projectId": "Project_EntityId",
-        "benefactorId": "Benefactor_EntityId",
-        "description": "Description",
-        "type": "Entity_Type",
-        "path": "Path",
-        "createdOn": "Created_On",
-        "createdBy": "Created_By",
-        "Modified_On": "Modified_On",
-        "Modified_By": "Modified_By",
-        "etag": "Etag",
-        "currentVersion": "Current_Version",
-        "dataFileHandleId": "File_Handle_Id",
-        "dataFileSizeBytes": "File_Size_Bytes",
-        "dataFileMD5Hex": "File_MD5",
-        "dataFileConcreteType": "File_Handle_Type",
-        "dataFileBucket": "S3_Bucket",
-        "dataFileKey": "S3_Key",
-        "HTAN_Center": "HTAN_Center",
-        "source_fileview": "Source_Fileview",
-        "schema_isValid": "Schema_Is_Valid",
-        "schema_errors": "Schema_Validation_Errors"
-    }
-
-    for component, df in stacked_by_component.items():
-        component_safe = component.replace("-", "_").replace(" ", "_")
-        table_name = f"bronze_METADATA_TABLE_All_Files_{component_safe}"
-
-        print(f"Processing {component} ({len(df):,} rows)")
-        df = df.rename(columns=rename_map)
-
-        htan_cols = [
-            "HTAN_Data_File_ID"
-        ]
-        htan_col = next((c for c in htan_cols if c in df.columns), None)
-
-        if htan_col is None:
-            df["BQ_Hash_ID"] = None
-        else:
-            df["HTAN_Data_File_ID"] = df[htan_col].astype(str)
-            df["Synapse_EntityId"] = df["File_EntityId"].astype(str)
-
-            df = df.merge(
-                registry_df,
-                how="left",
-                on=["HTAN_Data_File_ID", "Synapse_EntityId"]
-            )
-
-            needs_id = df["BQ_Hash_ID"].isna()
-
-            df.loc[needs_id, "BQ_Hash_ID"] = df.loc[needs_id].apply(
-                lambda r: mint_bq_hash(r["HTAN_Data_File_ID"], r["Synapse_EntityId"]),
-                axis=1
-            )
-
-            new_registry_rows = df.loc[needs_id, [
-                "BQ_Hash_ID", "HTAN_Data_File_ID", "Synapse_EntityId"
-            ]].drop_duplicates()
-
-            if not new_registry_rows.empty:
-                new_registry_rows["First_Seen"] = datetime.utcnow()
-                new_registry_rows["Source_Component"] = component
-
-                load_bq(
-                    client,
-                    HTAN_BQ_PROJECT,
-                    MEDALLION_LAYER,
-                    registry_table,
-                    new_registry_rows,
-                    write_mode="append"
-                )
-
-        df = df[["BQ_Hash_ID"] + [c for c in df.columns if c != "BQ_Hash_ID"]]
-
-        load_bq(
-            client,
-            HTAN_BQ_PROJECT,
-            MEDALLION_LAYER,
-            table_name,
-            df
-        )
-
-    #Do the same for Records----------------
-    component_dfs_records = defaultdict(list)
-
-    for _, row in all_record_annotations.iterrows():
-        annotation_view_id = row.get("Annotation_EntityId")
-        component = row.get("Component")
-
-        if pd.isna(annotation_view_id):
-            continue
-
-        try:
-            df = syn.tableQuery(f"SELECT * FROM {annotation_view_id}").asDataFrame()
-            df["HTAN_Center"] = row["HTAN_Center"]
-            df["Folder_EntityId"] = row["Folder_EntityId"]
-            df["Component"] = component
-            component_dfs_records[component].append(df)
-        except Exception as e:
-            print(f"Failed querying {annotation_view_id}: {e}")
-
-    stacked_by_component_records = {
-        component: pd.concat(dfs, ignore_index=True)
-        for component, dfs in component_dfs_records.items()
-    }
-
-    for component, df in stacked_by_component_records.items():
-        component_safe = component.replace("-", "_").replace(" ", "_")
-        table_name = f"bronze_METADATA_TABLE_All_Records_{component_safe}"
-
-        df = df.rename(columns=rename_map)
-
-        load_bq(
-            client,
-            HTAN_BQ_PROJECT,
-            MEDALLION_LAYER,
-            table_name,
-            df
-        )
-
-    #Valid Files Table----------------
-    only_valid_files = client.query("""
+    Returns:
+        - (pandas.DataFrame): The BigQuery table as a dataframe.
+    """
+    query = f"""
         SELECT *
-        FROM `htan2-dcc.htan2_synapse_raw.raw_INDEXING_TABLE_All_Files_With_Validation_Status`
-        WHERE Is_Valid = "True"
-    """).result().to_dataframe()
+        FROM `{project_id}.{dataset_id}.{table_id}`
+    """
+    return client.query(query).to_dataframe()
 
-    load_bq(
-        client,
-        HTAN_BQ_PROJECT,
-        MEDALLION_LAYER,
-        "bronze_INDEXING_TABLE_Valid_Files_With_Schema_Information",
-        only_valid_files
-    )
+def rename_curator_val_results(df, metadata_type):
+    """
+    Rename columns containing Curator Validation results.
 
+    Args:
+        - df (pandas.DataFrame): Component-level metadata table.
+        - metadata_type (str): Synapse structure annotation type (Files or Records).
+
+    Returns:
+        - df (pandas.DataFrame): Component-level metadata table.
+    """
+    if metadata_type == "Files":
+        df = df.rename(columns={'Schema_Version': 'Curator_Schema_Version',
+                                'Is_Valid': 'Curator_Validation_Passed',
+                                'Validation_Error_Message': 'Curator_Violations',
+                                'All_Validation_Error_Messages': 'Curator_Error_Messages',
+                                'Validated_On': 'Curator_Validation_Timestamp'})
+    elif metadata_type == "Records":
+        df = df.rename(columns={'Schema_Version': 'Curator_Schema_Version',
+                                'Validation_Passed': 'Curator_Validation_Passed',
+                                'Validation_Error_Message': 'Curator_Violations',
+                                'All_Validation_Messages': 'Curator_Error_Messages'})
+    return df
+
+def print_sub_section(title):
+    """
+    Print subsection headers.
+
+    Args:
+        - title (string): The title to be printed.
+    """
+    border = "=" * (len(title) + 8)
+    print(f"\n{border}\n>>> {title.upper()} <<<\n{border}\n")
+
+#####################################################
+#                    SILVER LAYER
+#####################################################
+
+def main():
+    """
+    Entry-point to the SILVER LAYER.
+    """
+
+    ##########################
+    # Initialize Clients
+    ##########################
+    client = init_bq_client()
+    syn = init_synapse_client()
+
+    ##########################
+    # Exclusion List
+    ##########################
+
+    print_sub_section("EXCLUSION LIST")
+
+    exclusion_query = f"""
+        SELECT *
+        FROM `{PROJECT}.{RAW_DATASET}.raw_INDEXING_TABLE_Exclusion_List_Form_Results`
+        WHERE Status = "EXCLUDE"
+    """
+    exclusion_list = client.query(exclusion_query).to_dataframe()
+    exclusion_list['HTAN_Center'] = exclusion_list['HTAN_Center'].str.replace(' ', '_')
+    exclusion_list['HTAN_Center'] = exclusion_list['HTAN_Center'].str.replace('HTAN2_Testing',
+                                                                              'htan2-testing1')
+
+    load_bq(client, PROJECT, SILVER_DATASET,
+            "silver_INDEXING_TABLE_Current_Excluded_Files",
+            exclusion_list)
+
+    ##########################
+    # Data Model
+    ##########################
+
+    print_sub_section("DATA MODEL")
+
+    # Get both File and Record Set Curator validation results
+    file_schema_query = f"""
+        SELECT File_EntityId, File_Name, Etag, Schema_Version
+        FROM `{PROJECT}.{BRONZE_DATASET}.bronze_INDEXING_TABLE_All_Files_With_Schema_Information`
+    """
+    file_schemas = client.query(file_schema_query).to_dataframe()
+
+    record_schema_query = f"""
+        SELECT Record_EntityId, Folder_EntityId, Component, HTAN_Center, Schema_Version
+        FROM `{PROJECT}.{BRONZE_DATASET}.bronze_INDEXING_TABLE_All_RecordSets_With_Schema_Information`
+    """
+    record_schemas = client.query(record_schema_query).to_dataframe()
+
+    # Get all unique versions of the data model used by Curator
+    all_versions = pd.concat([file_schemas['Schema_Version'],
+                              record_schemas['Schema_Version']])
+    unique_versions = all_versions.dropna().unique().tolist()
+
+    # Download the versions of the data model used to temp folder
+    tmp_path = "./data_models_tmp"
+    os.makedirs(tmp_path, exist_ok=True)
+    for version in unique_versions:
+        version = f"v{version}"
+        model = download_model(version)
+        data_model = convert_json_to_df(model)
+
+        file_path = tmp_path + f"/Data_Model_{version}.csv"
+
+        # Save Data Model
+        print(f"\nSaving Data Model Version {version} to {file_path}")
+        data_model.to_csv(file_path, header=True, index=False)
+
+    # Push new data models to BQ
+    model_tables = list(client.list_tables(f"{PROJECT}.htan2_data_model_cache"))
+    model_tables = [table.table_id for table in model_tables]
+
+    for version in unique_versions:
+        bq_version = version.replace('.', '_')
+        bq_model_table = f"HTAN2_Data_Model_v{bq_version}"
+
+        if bq_model_table not in model_tables:
+
+            print(f"\nPushing uncached Data Model Version {version} to BigQuery")
+            tabular_data_model = pd.read_csv(f"./data_models_tmp/Data_Model_v{version}.csv")
+            load_bq(
+                client,
+                PROJECT,
+                "htan2_data_model_cache",
+                bq_model_table,
+                tabular_data_model
+            )
+
+    ##############################
+    # Component-Level Validation
+    ##############################
+
+    print_sub_section("COMPONENT VALIDATION")
+
+    # Get all BRONZE layer metadata tables
+    bronze_tables = list(client.list_tables(f"{PROJECT}.{BRONZE_DATASET}"))
+    bronze_metadata = [
+        table.table_id
+        for table in bronze_tables
+        if table.table_id.startswith("bronze_METADATA_TABLE_All_")
+    ]
+
+    for table_id in bronze_metadata:
+
+        # Initialize the kind of metadata being checked and the component
+        metadata_type = table_id.split("_")[4]
+        component = table_id.split("_")[5]
+
+        # Pull the metadata table from BQ
+        df = query_bigquery_table(client, PROJECT, BRONZE_DATASET, table_id)
+
+        if metadata_type == "Files":
+            df = df.merge(file_schemas,
+                          on=["File_EntityId", "File_Name", "Etag"],
+                          how='left')
+        elif metadata_type == "Records":
+            df = df.merge(record_schemas,
+                          on=['Record_EntityId', 'Folder_EntityId', 'Component', 'HTAN_Center'],
+                          how='left')
+
+        df = rename_curator_val_results(df, metadata_type)
+
+        # Begin validation
+        validator = HTANComponentValidator()
+        df = validator.validate(df, syn, metadata_type, component, exclusion_list)
+
+        # Push component validation results to BQ
+        table_id = table_id.replace("bronze_", "silver_", 1)
+        load_bq(client, PROJECT, SILVER_DATASET, table_id, df)
+
+    # Remove temporary data model folder
+    shutil.rmtree(tmp_path)
 
 if __name__ == "__main__":
     main()
