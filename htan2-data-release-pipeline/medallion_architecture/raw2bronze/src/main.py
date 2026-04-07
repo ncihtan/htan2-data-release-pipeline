@@ -244,6 +244,8 @@ def main() -> None:
             with tempfile.TemporaryDirectory() as tmpdir:
                 rs = RecordSet(id=record_view_id, path=tmpdir).get()
                 data_df = pd.read_csv(rs.path).reset_index(drop=True)
+                #If all columns are NULL in the table; drop row.
+                data_df = data_df.dropna(how="all")
             
             #Get RecordSet metadata and validation file handle
             rs_meta = syn.get(record_view_id, downloadFile=False)
@@ -296,10 +298,9 @@ def main() -> None:
     for component, df in stacked_by_component_records.items():
         component_safe = component.replace("-", "_").replace(" ", "_")
         table_name = f"bronze_METADATA_TABLE_All_Records_{component_safe}"
-
+        
+        #Column rename and cleanup 
         df = df.rename(columns=rename_map)
-        #If all columns are NULL in the table; drop row.
-        df = df.dropna(how="all")
         df = df.drop(columns=['row_index'])
 
         load_bq(
