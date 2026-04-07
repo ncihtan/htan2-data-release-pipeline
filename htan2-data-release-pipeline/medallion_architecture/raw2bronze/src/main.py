@@ -250,24 +250,27 @@ def main() -> None:
             validation_fh_id = getattr(rs_meta, "validationFileHandleId", None)
             
             if not validation_fh_id:
-                raise ValueError(
-                    f"RecordSet {record_view_id} has no validationFileHandleId"
-                )
-            
+                print(f"RecordSet {record_view_id} has no validationFileHandleId")
+                validation_df = pd.DataFrame(index=data_df.index)
+                validation_df['is_valid'] = 'False'
+                validation_df['validation_error_message'] = 'Files were not validated using the Curator'
+                validation_df['all_validation_messages'] = 'Files are missing validationFileHandleId'
+                validation_df = validation_df.reset_index().rename(columns={"index": "row_index"})
+
+            else:
             #Download the validation CSV
-            validation_info = syn._getFileHandleDownload(
-                fileHandleId=validation_fh_id,
-                objectId=record_view_id,
-                objectType="FileEntity")
+                validation_info = syn._getFileHandleDownload(
+                    fileHandleId=validation_fh_id,
+                    objectId=record_view_id,
+                    objectType="FileEntity")
+                
+                #Pull out the local file path
+                validation_path = validation_info['preSignedURL']
+                
+                if not validation_path:
+                    raise ValueError(f"Could not determine validation file path from: {validation_info}")
+                validation_df = pd.read_csv(validation_path)
             
-            #Pull out the local file path
-            validation_path = validation_info['preSignedURL']
-            
-            if not validation_path:
-                raise ValueError(f"Could not determine validation file path from: {validation_info}")
-            
-            validation_df = pd.read_csv(validation_path)
-                        
             # 5) Join by row number
             data_df = data_df.reset_index().rename(columns={"index": "row_index"})
             merged_df = data_df.merge(validation_df, on="row_index", how="left")
