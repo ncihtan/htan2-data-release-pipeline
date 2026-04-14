@@ -39,8 +39,9 @@ Modified By:
 
 import re
 import pandas as pd
+import numpy as np
 
-from validators.base_validator import BaseValidator
+from htan_validators.base_validator import BaseValidator
 
 class HTANComponentValidator(BaseValidator):
     """
@@ -177,6 +178,9 @@ class HTANComponentValidator(BaseValidator):
             required_ids = ["HTAN_PARTICIPANT_ID"]
 
         for col in required_ids:
+
+            # Standardize nulls from BQ
+            df[col] = df[col].replace(['', 'nan', 'NaN', 'None', 'null'], np.nan)
 
             # Check for missing values
             null_mask = df[col].isna()

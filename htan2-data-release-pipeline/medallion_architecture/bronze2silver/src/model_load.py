@@ -64,7 +64,6 @@ VALID_VALUE_EXCEPTIONS = {
     "TIMEPOINT": "Link to NCI Permissible values for TIMEPOINT: https://cadsr.cancer.gov/onedata/dmdirect/NIH/NCI/CO/CDEDD?filter=CDEDD.ITEM_ID=5899851%20and%20ver_nr=1"
 }
 
-
 #####################################################
 #                     FUNCTIONS
 #####################################################

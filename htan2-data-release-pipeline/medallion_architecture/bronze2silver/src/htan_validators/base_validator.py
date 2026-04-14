@@ -32,7 +32,6 @@ Modified By:
 
 import ast
 import re
-from datetime import datetime
 import pandas as pd
 
 class BaseValidator:
@@ -131,7 +130,6 @@ class BaseValidator:
 
         # Set validation flag + timestamp
         df.at[idx, "Release_Validation_Passed"] = False
-        df.at[idx, "Release_Validation_Timestamp"] = datetime.now()
 
         # Initialize lists if needed
         if not isinstance(df.at[idx, "Release_Violations"], list):
