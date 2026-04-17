@@ -2,10 +2,31 @@
 # -*- coding: utf-8 -*-
 """
 Medallion Architecture: Bronze to Silver
+
+    The module is responsible for the BRONZE to SILVER transition of
+    the medallion architecture. It applies validation logic (Component-level
+    and Provenance) on all HTAN2 metadata, and generates error indexing
+    tables for both Files and Record Sets. 
+
+Configurations: None
+
+Functions:
+
+    - query_bigquery_table(client, project_id, dataset_id, table_id)
+    - rename_curator_val_results(df, metadata_type)
+    - print_sub_section(title)
+    - normalize_keys(df, cols)
+    - combine_lists(a, b)
+    - make_hashable(df)
+    - check_validation_passed(violations, error_list)
+    - main()
+
+Author:       Yamina Katariya <ykatariy@systemsbiology.org>
+Date Created: 04-01-2026
+Date Updated: 04-17-2026
+Modified By:  
 """
 
-import os
-import shutil
 from datetime import datetime
 import pandas as pd
 from htan_validators.component_validator import HTANComponentValidator
@@ -14,10 +35,6 @@ from client_load import (
     load_bq,
     init_bq_client,
     init_synapse_client
-)
-from model_load import (
-    download_model,
-    convert_json_to_df
 )
 
 #####################################################
@@ -133,6 +150,18 @@ def make_hashable(df):
     )
 
 def check_validation_passed(violations, error_list):
+    """
+    Determines whether a validation category has passed based on the
+    absence of specific error types in the Release_Violations column.
+
+    Args:
+        - violations (list or None): List of errors for a given row.
+        - error_list (list): List of error types associated with a
+            validation category (Component or Provenance).
+    
+    Returns:
+        - (int): Validation flag where 0 = Failed and 1 = Passed.
+    """
 
     return int(not bool(any(err in (violations if isinstance(violations, list) else [])
                             for err in error_list)))
@@ -188,10 +217,10 @@ def main():
             exclusion_list)
 
     ##########################
-    # Data Model
+    # Release Validation
     ##########################
 
-    print_sub_section("PULLING THE DATA MODEL")
+    print_sub_section("STARTING RELEASE VALIDATION")
 
     # Get both File and Record Set Curator validation results
     file_schema_query = f"""
@@ -205,51 +234,6 @@ def main():
         FROM `{PROJECT}.{BRONZE_DATASET}.bronze_INDEXING_TABLE_All_RecordSets_With_Schema_Information`
     """
     record_schemas = client.query(record_schema_query).to_dataframe()
-
-    # Get all unique versions of the data model used by Curator
-    all_versions = pd.concat([file_schemas['Schema_Version'],
-                              record_schemas['Schema_Version']])
-    unique_versions = all_versions.dropna().unique().tolist()
-
-    # Download the versions of the data model used to temp folder
-    tmp_path = "./data_models_tmp"
-    os.makedirs(tmp_path, exist_ok=True)
-    for version in unique_versions:
-        version = f"v{version}"
-        model = download_model(version)
-        data_model = convert_json_to_df(model)
-
-        file_path = tmp_path + f"/Data_Model_{version}.csv"
-
-        # Save Data Model
-        print(f"\nSaving Data Model Version {version} to {file_path}")
-        data_model.to_csv(file_path, header=True, index=False)
-
-    # Push new data models to BQ
-    model_tables = list(client.list_tables(f"{PROJECT}.htan2_data_model_cache"))
-    model_tables = [table.table_id for table in model_tables]
-
-    for version in unique_versions:
-        bq_version = version.replace('.', '_')
-        bq_model_table = f"HTAN2_Data_Model_v{bq_version}"
-
-        if bq_model_table not in model_tables:
-
-            print(f"\nPushing uncached Data Model Version {version} to BigQuery")
-            tabular_data_model = pd.read_csv(f"./data_models_tmp/Data_Model_v{version}.csv")
-            load_bq(
-                client,
-                PROJECT,
-                "htan2_data_model_cache",
-                bq_model_table,
-                tabular_data_model
-            )
-
-    ##########################
-    # Release Validation
-    ##########################
-
-    print_sub_section("STARTING RELEASE VALIDATION")
 
     # Get all BRONZE layer metadata tables
     bronze_tables = list(client.list_tables(f"{PROJECT}.{BRONZE_DATASET}"))
@@ -282,6 +266,7 @@ def main():
             df = df.merge(record_schemas,
                           on=['Record_EntityId', 'Folder_EntityId', 'Component', 'HTAN_Center'],
                           how='left')
+            df.to_csv("testing.csv")
 
         df = rename_curator_val_results(df, metadata_type)
 
@@ -289,7 +274,7 @@ def main():
 
         # Begin component validation
         comp_validator = HTANComponentValidator()
-        df = comp_validator.validate(df, syn, metadata_type, component, exclusion_list)
+        df = comp_validator.validate(df, syn, client, metadata_type, component, exclusion_list)
 
         # Begin provenance validation
         prov_validator = HTANProvenanceValidator()
@@ -460,9 +445,10 @@ def main():
                 'HTAN_Center',
                 'HTAN_DATA_FILE_ID'],
         keep="first")
-    load_bq(client, PROJECT, SILVER_DATASET,
-            "silver_INDEXING_TABLE_All_File_Errors",
-            file_error_table)
+    if not file_error_table.empty:
+        load_bq(client, PROJECT, SILVER_DATASET,
+                "silver_INDEXING_TABLE_All_File_Errors",
+                file_error_table)
 
     record_error_table = pd.DataFrame(record_error_rows)
     record_error_table = record_error_table.drop_duplicates(
@@ -472,12 +458,10 @@ def main():
                 'HTAN_PARTICIPANT_ID',
                 'HTAN_BIOSPECIMEN_ID'],
         keep="first")
-    load_bq(client, PROJECT, SILVER_DATASET,
-            "silver_INDEXING_TABLE_All_Record_Errors",
-            record_error_table)
-
-    # Remove temporary data model folder
-    shutil.rmtree(tmp_path)
+    if not record_error_table.empty:
+        load_bq(client, PROJECT, SILVER_DATASET,
+                "silver_INDEXING_TABLE_All_Record_Errors",
+                record_error_table)
 
 if __name__ == "__main__":
     main()

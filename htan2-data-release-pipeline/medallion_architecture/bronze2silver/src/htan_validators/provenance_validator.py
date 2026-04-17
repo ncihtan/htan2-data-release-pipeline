@@ -27,7 +27,7 @@ HTAN Validation: Provenance
 
 Author:       Yamina Katariya <ykatariy@systemsbiology.org> 
 Date Created: 04-01-2026
-Date Updated: 
+Date Updated: 04-17-2026
 Modified By:  
 """
 
@@ -39,25 +39,6 @@ class HTANProvenanceValidator(BaseValidator):
     """
     Validator for HTAN provenance chain checks.
     """
-
-    def _query_bigquery_table(self, client, project_id, dataset_id, table_id, attrs="*"):
-        """
-        Get an entire table from BigQuery as a Pandas DataFrame.
-
-        Args:
-            - client (BigQuery instance): A BigQuery client object.
-            - project_id (str): BigQuery project name.
-            - dataset_id (str): BigQuery dataset name.
-            - table_id (str): BigQuery table name.
-        
-        Returns:
-            - (pandas.DataFrame): The BigQuery table as a dataframe.
-        """
-        query = f"""
-            SELECT {attrs}
-            FROM `{project_id}.{dataset_id}.{table_id}`
-        """
-        return client.query(query).to_dataframe()
 
     def check_bio_and_demo_record_per_center(self, df, id_prov, component):
         """
@@ -89,7 +70,7 @@ class HTANProvenanceValidator(BaseValidator):
 
         return id_prov
 
-    def check_parent_to_participant_linkages(self, df, demo_df):
+    def check_parent_to_participant_linkages(self, client, df, demo_df):
         """
         Validate that Participant IDs referenced as HTAN_PARENT_IDs exist
         in the Demographics metadata table.
@@ -104,7 +85,7 @@ class HTANProvenanceValidator(BaseValidator):
 
         # Get the HTAN Participant ID REGEX
         model_ver = sorted(df["Curator_Schema_Version"].dropna().unique().tolist(), reverse=True)
-        data_model = self.get_versioned_data_model(model_ver[0])
+        data_model = self.get_versioned_data_model(client, model_ver[0])
         participant_id_regex = self.get_regex(data_model, "Demographics", "HTAN_PARTICIPANT_ID")
 
         valid_participants = set(demo_df['HTAN_PARTICIPANT_ID'].dropna().unique())
@@ -301,7 +282,7 @@ class HTANProvenanceValidator(BaseValidator):
         id_prov = self.initialize_columns(id_prov)
 
         # Query the Demographics metadata table
-        demo_df = self._query_bigquery_table(client,
+        demo_df = self.query_bigquery_table(client,
                                             'htan2-dcc',
                                             'htan2_medallion_bronze',
                                             'bronze_METADATA_TABLE_All_Records_Demographics',
@@ -311,23 +292,25 @@ class HTANProvenanceValidator(BaseValidator):
         # Validation Checks
         #######################
 
-        # Check Center-level Biospecimen and Demographics completeness (#1)
-        if component in ["Biospecimen", "Demographics"]:
-            id_prov = self.check_bio_and_demo_record_per_center(df, id_prov, component)
+        if not df.empty:
 
-        if component == "Biospecimen":
+            # Check Center-level Biospecimen and Demographics completeness (#1)
+            if component in ["Biospecimen", "Demographics"]:
+                id_prov = self.check_bio_and_demo_record_per_center(df, id_prov, component)
 
-            # Check Participant IDS in Biospecimen are recoded in Demographics (#2)
-            df = self.check_parent_to_participant_linkages(df, demo_df)
+            if component == "Biospecimen":
 
-            # Check Biospecimen IDs are linked to files (#4)
-            df = self.check_biospecimen_linked_to_files(df, id_prov)
+                # Check Participant IDS in Biospecimen are recoded in Demographics (#2)
+                df = self.check_parent_to_participant_linkages(client, df, demo_df)
 
-            # Check Data File IDs are unique across centers (#5)
-            id_prov = self.prov_cross_validation(id_prov)
+                # Check Biospecimen IDs are linked to files (#4)
+                df = self.check_biospecimen_linked_to_files(df, id_prov)
 
-        # Check Participant IDs in non-Demographics tables exist in Demographics (#3)
-        if metadata_type == "Records" and component not in ["Biospecimen", "Demographics"]:
-            df = self.check_participants_in_non_demographics(df, demo_df)
+                # Check Data File IDs are unique across centers (#5)
+                id_prov = self.prov_cross_validation(id_prov)
+
+            # Check Participant IDs in non-Demographics tables exist in Demographics (#3)
+            if metadata_type == "Records" and component not in ["Biospecimen", "Demographics"]:
+                df = self.check_participants_in_non_demographics(df, demo_df)
 
         return df, id_prov

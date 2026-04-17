@@ -26,7 +26,7 @@ HTAN Validation: Base Class
 
 Author:       Yamina Katariya <ykatariy@systemsbiology.org> 
 Date Created: 04-01-2026
-Date Updated: 
+Date Updated: 04-17-2026
 Modified By:
 """
 
@@ -82,7 +82,7 @@ class BaseValidator:
             (data_model["Component"] == component) &
             (data_model["Attribute"] == htan_id)
         ]
-        regex_pattern = row["Valid Values"].str.extract(r"Follows REGEX pattern:\s*(.*)").iloc[0, 0]
+        regex_pattern = row["Valid_Values"].str.extract(r"Follows REGEX pattern:\s*(.*)").iloc[0, 0]
 
         return re.compile(regex_pattern)
 
@@ -144,8 +144,27 @@ class BaseValidator:
         df.at[idx, "Release_Error_Messages"].append(error_entry)
 
         return df
+    
+    def query_bigquery_table(self, client, project_id, dataset_id, table_id, attrs="*"):
+        """
+        Get an entire table from BigQuery as a Pandas DataFrame.
 
-    def get_versioned_data_model(self, schema_ver):
+        Args:
+            - client (BigQuery instance): A BigQuery client object.
+            - project_id (str): BigQuery project name.
+            - dataset_id (str): BigQuery dataset name.
+            - table_id (str): BigQuery table name.
+        
+        Returns:
+            - (pandas.DataFrame): The BigQuery table as a dataframe.
+        """
+        query = f"""
+            SELECT {attrs}
+            FROM `{project_id}.{dataset_id}.{table_id}`
+        """
+        return client.query(query).to_dataframe()
+
+    def get_versioned_data_model(self, client, schema_ver):
         """
         Loads a specific version of the data model from that data models
         pulled and saved in tabular form as CSVs.
@@ -156,7 +175,15 @@ class BaseValidator:
         Returns:
             - (pandas.DataFrame): The loaded data model.
         """
-        return pd.read_csv(f"./data_models_tmp/Data_Model_v{schema_ver}.csv")
+        schema_ver = schema_ver.replace(".", "_")
+        model = self.query_bigquery_table(
+            client,
+            'htan2-dcc',
+            'htan2_data_model_cache',
+            f"HTAN2_Data_Model_v{schema_ver}"
+        )
+
+        return model
 
     def validate(self, *args, **kwargs):
         """

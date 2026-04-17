@@ -33,7 +33,7 @@ HTAN Validation: Component
 
 Author:       Yamina Katariya <ykatariy@systemsbiology.org> 
 Date Created: 04-01-2026
-Date Updated: 
+Date Updated: 04-17-2026
 Modified By:  
 """
 
@@ -204,7 +204,7 @@ class HTANComponentValidator(BaseValidator):
 
         return df
 
-    def check_parent_id_type(self, df, component):
+    def check_parent_id_type(self, client, df, component):
         """
         Validates that HTAN Parent ID matches the expected format based on the 
         REGEX in the data model and component-specific requirements.
@@ -219,7 +219,7 @@ class HTANComponentValidator(BaseValidator):
 
         # Get the latest schema version for uploaded data
         model_ver = sorted(df["Curator_Schema_Version"].dropna().unique().tolist(), reverse=True)
-        data_model = self.get_versioned_data_model(model_ver[0])
+        data_model = self.get_versioned_data_model(client, model_ver[0])
 
         # Get the REGEX patterns from the data model
         data_file_id_regex = self.get_regex(data_model, "BulkWESLevel1", "HTAN_DATA_FILE_ID")
@@ -342,7 +342,7 @@ class HTANComponentValidator(BaseValidator):
 
         return df
 
-    def validate(self, df, syn, metadata_type, component, exclusion_list):
+    def validate(self, df, syn, client, metadata_type, component, exclusion_list):
         """
         Main entry point to run all relevant validation checks on 
         a component-level dataframe.
@@ -383,7 +383,7 @@ class HTANComponentValidator(BaseValidator):
 
             # Check HTAN Parent ID format (#3)
             if (metadata_type == "Files" or component == "Biospecimen") and component != "SpatialPanel":
-                df = self.check_parent_id_type(df, component)
+                df = self.check_parent_id_type(client, df, component)
 
             # Check internal linkage for Biospecimen (#4)
             if component == "Biospecimen":
