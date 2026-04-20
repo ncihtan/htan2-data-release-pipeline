@@ -20,6 +20,7 @@ Modified By:  Yamina Katariya <ykatariy@systemsbiology.org>
 
 from google.cloud import bigquery
 import synapseclient
+import os
 
 def init_synapse_client():
     """
@@ -29,10 +30,11 @@ def init_synapse_client():
     Returns:
         - syn (Synapse instance): Synapse client object
     """
-
+    SYN_PAT = os.environ.get('SYNAPSE_AUTH_TOKEN_BRONZE')
     syn = synapseclient.Synapse()
+
     try:
-        syn.login()
+        syn.login(authToken=SYN_PAT)
     except synapseclient.core.exceptions.SynapseNoCredentialsError:
         print("Please fill in 'username' and 'password'/'api_key' values in .synapseConfig.")
     except synapseclient.core.exceptions.SynapseAuthenticationError:
