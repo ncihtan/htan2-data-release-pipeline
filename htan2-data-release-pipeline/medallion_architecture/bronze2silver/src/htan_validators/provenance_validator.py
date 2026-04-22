@@ -84,6 +84,7 @@ class HTANProvenanceValidator(BaseValidator):
         """
 
         # Get the HTAN Participant ID REGEX
+        # Note: The data model pulled here is the most recent release
         model_ver = sorted(df["Curator_Schema_Version"].dropna().unique().tolist(), reverse=True)
         data_model = self.get_versioned_data_model(client, model_ver[0])
         participant_id_regex = self.get_regex(data_model, "Demographics", "HTAN_PARTICIPANT_ID")
