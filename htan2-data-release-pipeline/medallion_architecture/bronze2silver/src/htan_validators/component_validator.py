@@ -218,6 +218,7 @@ class HTANComponentValidator(BaseValidator):
         """
 
         # Get the latest schema version for uploaded data
+        # Note: The data model pulled here is the most recent release
         model_ver = sorted(df["Curator_Schema_Version"].dropna().unique().tolist(), reverse=True)
         data_model = self.get_versioned_data_model(client, model_ver[0])
 
