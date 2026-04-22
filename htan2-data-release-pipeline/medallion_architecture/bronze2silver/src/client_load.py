@@ -30,7 +30,7 @@ def init_synapse_client():
     Returns:
         - syn (Synapse instance): Synapse client object
     """
-    SYN_PAT = os.environ.get('SYNAPSE_AUTH_TOKEN_BRONZE')
+    SYN_PAT = os.environ.get('SYNAPSE_AUTH_TOKEN_SILVER')
     syn = synapseclient.Synapse()
 
     try:
