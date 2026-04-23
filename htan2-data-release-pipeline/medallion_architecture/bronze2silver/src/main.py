@@ -266,7 +266,6 @@ def main():
             df = df.merge(record_schemas,
                           on=['Record_EntityId', 'Folder_EntityId', 'Component', 'HTAN_Center'],
                           how='left')
-            df.to_csv("testing.csv")
 
         df = rename_curator_val_results(df, metadata_type)
 
@@ -299,11 +298,15 @@ def main():
                         "UNRESOLVED_ID_PATH",
                         "MISSING_HTAN_ID",
                         "DUPLICATE_HTAN_ID",
+                        "INVALID_SYNAPSE_ID",
                         "EXCLUDED_FILE"]
 
     provenance_errors = ["MISSING_CENTER_RECORD",
                          "MISSING_DEMOGRAPHICS",
+                         "UNUSED_BIOSPECIMEN",
+                         "MISSING_BIOSPECIMEN",
                          "ID_CROSS_VALIDATION"]
+
     file_error_rows = []
     record_error_rows = []
 
