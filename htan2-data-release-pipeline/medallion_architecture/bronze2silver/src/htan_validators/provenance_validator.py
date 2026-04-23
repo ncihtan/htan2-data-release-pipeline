@@ -182,7 +182,7 @@ class HTANProvenanceValidator(BaseValidator):
                 self.append_error(
                     df,
                     idx,
-                    error_type="UNRESOLVED_ID_PATH",
+                    error_type="UNUSED_BIOSPECIMEN",
                     message=(
                         f"Biospecimen ID '{missing_id}' is not linked to any files."
                     )
@@ -196,7 +196,7 @@ class HTANProvenanceValidator(BaseValidator):
                 self.append_error(
                     id_prov,
                     idx,
-                    error_type="UNRESOLVED_ID_PATH",
+                    error_type="MISSING_BIOSPECIMEN",
                     message=(
                         f"Biospecimen ID '{id_prov.at[idx, 'HTAN_ASSAYED_BIOSPECIMEN_ID']}' was "
                         f"not submitted as a Biospecimen record."
