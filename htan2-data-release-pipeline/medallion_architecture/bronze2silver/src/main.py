@@ -224,7 +224,7 @@ def main():
 
     # Get both File and Record Set Curator validation results
     file_schema_query = f"""
-        SELECT File_EntityId, File_Name, Component, Schema_Version
+        SELECT File_EntityId, name AS File_Name, Component, Schema_Version
         FROM `{PROJECT}.{BRONZE_DATASET}.bronze_INDEXING_TABLE_All_Files_With_Schema_Information`
     """
     file_schemas = client.query(file_schema_query).to_dataframe()
