@@ -158,7 +158,7 @@ def main():
         for version in missing_in_bq:
 
             # Normalize to GitHub
-            github_model_version = f"v{version.replace("_", ".")}"
+            github_model_version = f"v{version.replace('_', '.')}"
 
             data = download_model(github_model_version)
             tabular_data_model = convert_json_to_df(data)
