@@ -28,8 +28,35 @@ resource "google_cloud_run_v2_job" "default" {
              name = "SYNAPSE_AUTH_TOKEN_BRONZE"
              value_source {
                secret_key_ref {
-                 secret  = var.secret_id
+                 secret  = var.secrets.secret_id
                  version = "latest"
+                }
+              }
+            }
+           env {
+              name = "GITHUB_APP_ID"
+              value_source {
+                secret_key_ref {
+                  secret  = var.secrets.app_id
+                  version = "latest"
+                }
+              }
+            }
+           env {
+              name = "GITHUB_INSTALLATION_ID"
+              value_source {
+                secret_key_ref {
+                  secret  = var.secrets.installation_id
+                  version = "latest"
+                }
+              }
+            }
+           env {
+              name = "GITHUB_PRIVATE_KEY"
+              value_source {
+                secret_key_ref {
+                  secret  = var.secrets.private_key
+                  version = "latest"
                 }
               }
             }
