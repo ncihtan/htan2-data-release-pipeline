@@ -1,7 +1,13 @@
 project_id = "htan2-dcc"
 region = "us-east1"
 image_url = "us-docker.pkg.dev/htan2-dcc/gcr.io/linkml2bigquery:latest"
-secret_id = "synapse_dyp_secret" 
+
+secrets = {
+  app_id = "github-app-id"
+  installation_id = "github-installation-id"
+  private_key = "github-private-key"
+  secret_id = "synapse_dyp_secret"
+}
 
 # service account variables
 google_service_account = {
