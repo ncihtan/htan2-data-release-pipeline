@@ -26,6 +26,8 @@ import re
 import os
 import base64
 import json
+import time
+import jwt
 import pandas as pd
 
 
@@ -36,7 +38,27 @@ OWNER = "ncihtan"
 REPO = "htan2-data-model"
 BRANCH = "main"
 BASE_FOLDER = "JSON_Schemas"
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+GITHUB_APP_ID = os.environ["GITHUB_APP_ID"]
+GITHUB_INSTALLATION_ID = os.environ["GITHUB_INSTALLATION_ID"]
+GITHUB_PRIVATE_KEY = os.environ["GITHUB_PRIVATE_KEY"]
+GITHUB_PRIVATE_KEY = GITHUB_PRIVATE_KEY.replace("\\n", "\n")
+
+now = int(time.time())
+payload = {
+    "iat": now,
+    "exp": now + 600,
+    "iss": GITHUB_APP_ID
+}
+
+jwt_token = jwt.encode(payload, GITHUB_PRIVATE_KEY, algorithm="RS256")
+app_installation_url = f"https://api.github.com/app/installations/{GITHUB_INSTALLATION_ID}/access_tokens"
+install_headers = {
+    "Authorization": f"Bearer {jwt_token}",
+    "Accept": "application/vnd.github+json"
+}
+install_resp = requests.post(app_installation_url, headers=install_headers)
+install_resp.raise_for_status()
+GITHUB_TOKEN = install_resp.json()["token"]
 
 # Initialize persistent session for API
 session = requests.Session()
