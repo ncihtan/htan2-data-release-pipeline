@@ -154,6 +154,7 @@ def main():
     missing_in_bq = github_versions - bq_versions
 
     if missing_in_bq:
+
         for version in missing_in_bq:
 
             # Normalize to GitHub
@@ -173,6 +174,8 @@ def main():
                 f"HTAN2_Data_Model_v{version}",
                 tabular_data_model
             )
+    else:
+        print("No new versions found.")
 
 if __name__ == "__main__":
     main()
