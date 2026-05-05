@@ -22,7 +22,11 @@ HTAN Validation: Provenance
         4. Biospecimen-to-File Linkages: Ensures that Biospecimen IDs are
         linked to files via the provenance table.
 
-        5. Data File ID Cross-Validation: Ensures that each HTAN_DATA_FILE_ID
+        5. Panel-to-File Linkages: Ensures that Panel metadata (Channel and
+        Spatial) are linked to Files and that all Panel metadata provided
+        exists in the ChannelMetadata and SpatialPanel record sets.
+
+        6. Data File ID Cross-Validation: Ensures that each HTAN_DATA_FILE_ID
         is unique across all centers.
 
 Author:       Yamina Katariya <ykatariy@systemsbiology.org> 
@@ -205,6 +209,76 @@ class HTANProvenanceValidator(BaseValidator):
 
         return df
 
+    def check_panel_data(self, df, table_id, metadata_type, client):
+        """
+        Validate panel ID linkage between File metadata and panel (channel) metadata.
+
+        Args:
+            - df (pandas.DataFrame): Component-level metadata table.
+            - table_id (str): BigQuery table name.
+            - metadata_type (str): Metadata type (Files or Records).
+            - client (BigQuery instance): BigQuery client object.
+
+        Returns:
+            - df (pandas.DataFrame): Component-level metadata table.
+        """
+
+        # Pull the reference table from BQ
+        error_type = ""
+        message = ""
+        queried_df = self.query_bigquery_table(
+            client,
+            'htan2-dcc',
+            'htan2_medallion_bronze',
+            table_id
+        )
+
+        # Check if HTAN_PANEL_ID is null for File metadata
+        if metadata_type == "Files":
+            null_mask = df["HTAN_PANEL_ID"].isna()
+
+            for idx in df[null_mask].index:
+                self.append_error(
+                    df,
+                    idx,
+                    error_type="MISSING_PANEL",
+                    message="Panel metadata is not linked because HTAN_PANEL_ID is missing."
+                )
+
+        # Get actual IDs from metadata tables to check
+        target_ids = df['HTAN_PANEL_ID'].dropna().unique()
+        reference_ids = queried_df['HTAN_PANEL_ID'].dropna().unique()
+
+        # Identify panel type (e.g., ChannelMetadata or SpatialPanel)
+        panel_type = queried_df['Component'].dropna().unique()[0]
+
+        # Check if Panel metadata linkage to files
+        missing_ids = [pid for pid in target_ids if pid not in reference_ids]
+        if missing_ids:
+
+            invalid_mask = df['HTAN_PANEL_ID'].isin(missing_ids)
+            for idx in df[invalid_mask].index:
+                missing_id = df.at[idx, 'HTAN_PANEL_ID']
+
+                # Files: panel ID should have a corresponding record set
+                if metadata_type == "Files":
+                    error_type = "MISSING_PANEL"
+                    message = f"HTAN Panel ID '{missing_id}' was not submitted as a {panel_type} record."
+
+                # Record Sets: panel exists but is not used by any files
+                else:
+                    error_type = "UNUSED_PANEL"
+                    message = f"HTAN Panel ID '{missing_id}' is not linked to any files."
+
+                self.append_error(
+                    df,
+                    idx,
+                    error_type=error_type,
+                    message=message
+                )
+
+        return df
+
     def prov_cross_validation(self, id_prov):
         """
         Ensure that each HTAN_DATA_FILE_ID uniquely maps to a single file.
@@ -282,12 +356,14 @@ class HTANProvenanceValidator(BaseValidator):
         df = self.initialize_columns(df)
         id_prov = self.initialize_columns(id_prov)
 
-        # Query the Demographics metadata table
-        demo_df = self.query_bigquery_table(client,
-                                            'htan2-dcc',
-                                            'htan2_medallion_bronze',
-                                            'bronze_METADATA_TABLE_All_Records_Demographics',
-                                            "HTAN_PARTICIPANT_ID")
+        # Query the associated metadata tables (demographics, channel, and panel)
+        demo_df = self.query_bigquery_table(
+            client,
+            'htan2-dcc',
+            'htan2_medallion_bronze',
+            'bronze_METADATA_TABLE_All_Records_Demographics',
+            "HTAN_PARTICIPANT_ID"
+        )
 
         #######################
         # Validation Checks
@@ -307,11 +383,41 @@ class HTANProvenanceValidator(BaseValidator):
                 # Check Biospecimen IDs are linked to files (#4)
                 df = self.check_biospecimen_linked_to_files(df, id_prov)
 
-                # Check Data File IDs are unique across centers (#5)
+                # Check Data File IDs are unique across centers (#6)
                 id_prov = self.prov_cross_validation(id_prov)
 
+            # Check Panel (Channel and Spatial) Linkage to Files (#5)
+            if component == "MultiplexMicroscopyLevel2":
+                df = self.check_panel_data(
+                    df,
+                    "bronze_METADATA_TABLE_All_Records_ChannelMetadata",
+                    metadata_type,
+                    client
+                )
+            if component == "SpatialLevel3":
+                df = self.check_panel_data(
+                    df,
+                    "bronze_METADATA_TABLE_All_Records_SpatialPanel",
+                    metadata_type,
+                    client
+                )
+            if component == "ChannelMetadata":
+                df = self.check_panel_data(
+                    df,
+                    "bronze_METADATA_TABLE_All_Files_MultiplexMicroscopyLevel2",
+                    metadata_type,
+                    client
+                )
+            if component == "SpatialPanel":
+                df = self.check_panel_data(
+                    df,
+                    "bronze_METADATA_TABLE_All_Files_SpatialLevel3",
+                    metadata_type,
+                    client
+                )
+
             # Check Participant IDs in non-Demographics tables exist in Demographics (#3)
-            if metadata_type == "Records" and component not in ["Biospecimen", "Demographics"]:
+            if metadata_type == "Records" and component not in ["Biospecimen", "Demographics", "ChannelMetadata", "SpatialPanel"]:
                 df = self.check_participants_in_non_demographics(df, demo_df)
 
         return df, id_prov

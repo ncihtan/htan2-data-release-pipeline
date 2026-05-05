@@ -305,7 +305,9 @@ def main():
                          "MISSING_DEMOGRAPHICS",
                          "UNUSED_BIOSPECIMEN",
                          "MISSING_BIOSPECIMEN",
-                         "ID_CROSS_VALIDATION"]
+                         "ID_CROSS_VALIDATION",
+                         "MISSING_PANEL",
+                         "UNUSED_PANEL"]
 
     file_error_rows = []
     record_error_rows = []
@@ -359,6 +361,7 @@ def main():
                     "HTAN_PARTICIPANT_ID": row.get("HTAN_PARTICIPANT_ID", None),
                     "HTAN_BIOSPECIMEN_ID": row.get("HTAN_BIOSPECIMEN_ID", None),
                     "HTAN_PARENT_ID": row.get("HTAN_PARENT_ID", None),
+                    "HTAN_PANEL_ID": row.get("HTAN_PANEL_ID", None),
                     "Curator_Violations": row["Curator_Violations"],
                     "Curator_Error_Messages": row["Curator_Error_Messages"],
                     "Release_Violations": row["Release_Violations"],
@@ -459,7 +462,8 @@ def main():
                 'Folder_EntityId',
                 'HTAN_Center',
                 'HTAN_PARTICIPANT_ID',
-                'HTAN_BIOSPECIMEN_ID'],
+                'HTAN_BIOSPECIMEN_ID',
+                'HTAN_PANEL_ID'],
         keep="first")
     if not record_error_table.empty:
         load_bq(client, PROJECT, SILVER_DATASET,
