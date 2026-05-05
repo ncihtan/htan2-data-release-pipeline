@@ -172,9 +172,11 @@ class HTANComponentValidator(BaseValidator):
             required_ids = ["HTAN_DATA_FILE_ID"]
         elif metadata_type == "Files" and component == "SpatialPanel":
             required_ids = ["HTAN_PANEL_ID"]
+        elif metadata_type == "Files" and component == "ChannelMetadata":
+            required_ids = ["HTAN_PANEL_ID"]
         elif metadata_type == "Records" and component == "Biospecimen":
             required_ids = ["HTAN_BIOSPECIMEN_ID"]
-        elif metadata_type == "Records" and component != "Biospecimen":
+        elif metadata_type == "Records" and component not in ["Biospecimen", "ChannelMetadata", "SpatialPanel"]:
             required_ids = ["HTAN_PARTICIPANT_ID"]
 
         for col in required_ids:
@@ -375,12 +377,6 @@ class HTANComponentValidator(BaseValidator):
                 df = self.check_synapse_id(syn, df, "File_EntityId")
             elif metadata_type == "Records":
                 df = self.check_synapse_id(syn, df, "Folder_EntityId")
-
-            if component == "MultiplexMicroscopyLevel2":
-                df = self.check_synapse_id(syn, df, "CHANNEL_METADATA_ID")
-
-            if component == "SpatialLevel3":
-                df = self. check_synapse_id(syn, df, "PANEL_SYNAPSE_ID")
 
             # Check HTAN Parent ID format (#3)
             if (metadata_type == "Files" or component == "Biospecimen") and component != "SpatialPanel":
