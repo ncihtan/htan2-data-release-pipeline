@@ -1,38 +1,31 @@
 """
-HTAN Validation: Provenance
+This module outlines the HTANProvenanceValidator class, which
+inherits the BaseValidator class. The HTANProvenanceValidator
+performs validation checks across metadata tables to ensure
+the integrity of the HTAN entity provenance chain with the
+following checks:
 
-    This module outlines the HTANProvenanceValidator class, which
-    inherits the BaseValidator class. The HTANProvenanceValidator
-    performs validation checks across metadata tables to ensure
-    the integrity of the HTAN entity provenance chain with the
-    following checks:
+    1. **Center-level Record Completeness:** Ensures each HTAN center
+    has submitted at least one Biospecimen and one Demographics
+    record.
 
-        1. Center-level Record Completeness: Ensures each HTAN center
-        has submitted at least one Biospecimen and one Demographics
-        record.
+    2. **Parent-to-Participant Linkages:** Verifies that Participant IDs
+    referenced as Biospecimen Parent IDs exist as a Demographics
+    record.
 
-        2. Parent-to-Participant Linkages: Verifies that Participant IDs
-        referenced as Biospecimen Parent IDs exist as a Demographics
-        record.
+    3. **Participants in Non-Demographics Tables:** Ensures that
+    Participant IDs used in non-Demographics record sets are present
+    in the Demographics table.
 
-        3. Participants in Non-Demographics Tables: Ensures that
-        Participant IDs used in non-Demographics record sets are present
-        in the Demographics table.
+    4. **Biospecimen-to-File Linkages:** Ensures that Biospecimen IDs are
+    linked to files via the provenance table.
 
-        4. Biospecimen-to-File Linkages: Ensures that Biospecimen IDs are
-        linked to files via the provenance table.
+    5. **Panel-to-File Linkages:** Ensures that Panel metadata (Channel and
+    Spatial) are linked to Files and that all Panel metadata provided
+    exists in the ChannelMetadata and SpatialPanel record sets.
 
-        5. Panel-to-File Linkages: Ensures that Panel metadata (Channel and
-        Spatial) are linked to Files and that all Panel metadata provided
-        exists in the ChannelMetadata and SpatialPanel record sets.
-
-        6. Data File ID Cross-Validation: Ensures that each HTAN_DATA_FILE_ID
-        is unique across all centers.
-
-Author:       Yamina Katariya <ykatariy@systemsbiology.org> 
-Date Created: 04-01-2026
-Date Updated: 04-17-2026
-Modified By:  
+    6. **Data File ID Cross-Validation:** Ensures that each HTAN_DATA_FILE_ID
+    is unique across all centers.
 """
 
 import pandas as pd
@@ -51,12 +44,18 @@ class HTANProvenanceValidator(BaseValidator):
         Demographics record.
 
         Args:
-            - df (pandas.DataFrame): Component-level metadata table.
-            - id_prov (pandas.DataFrame): Provenance table.
-            - component (str): Component being validated.
+            df (pandas.DataFrame):
+                Component-level metadata table.
+
+            id_prov (pandas.DataFrame):
+                Provenance table.
+
+            component (str):
+                Component being validated.
         
         Returns:
-            - id_prov (pandas.DataFrame): Provenance table with errors.
+            id_prov (pandas.DataFrame):
+                Provenance table with errors.
         """
 
         valid_centers = set(df["HTAN_Center"].dropna().unique())
@@ -80,11 +79,15 @@ class HTANProvenanceValidator(BaseValidator):
         in the Demographics metadata table.
 
         Args:
-            - df (pandas.DataFrame): Component-level metadata table.
-            - demo_df (pandas.DataFrame): Demographics metadata table.
+            df (pandas.DataFrame):
+                Component-level metadata table.
+
+            demo_df (pandas.DataFrame):
+                Demographics metadata table.
 
         Returns:
-            - df (pandas.DataFrame): Component-level metadata table.
+            df (pandas.DataFrame):
+                Component-level metadata table.
         """
 
         # Get the HTAN Participant ID REGEX
@@ -129,11 +132,15 @@ class HTANProvenanceValidator(BaseValidator):
         in the Demographics metadata table.
 
         Args:
-            - df (pandas.DataFrame): Component-level metadata table.
-            - demo_df (pandas.DataFrame): Demographics metadata table.
+            df (pandas.DataFrame):
+                Component-level metadata table.
+
+            demo_df (pandas.DataFrame):
+                Demographics metadata table.
 
         Returns:
-            - df (pandas.DataFrame): Component-level metadata table.
+            df (pandas.DataFrame):
+                Component-level metadata table.
         """
 
         valid_demo_ids = set(demo_df['HTAN_PARTICIPANT_ID'].dropna().unique())
@@ -166,11 +173,15 @@ class HTANProvenanceValidator(BaseValidator):
         metadata table.
 
         Args:
-            - df (pandas.DataFrame): Component-level metadata table.
-            - id_prov (pandas.DataFrame): Provenance table.
+            df (pandas.DataFrame):
+                Component-level metadata table.
+
+            id_prov (pandas.DataFrame):
+                Provenance table.
 
         Returns:
-            - df (pandas.DataFrame): Component-level metadata table.
+            df (pandas.DataFrame):
+                Component-level metadata table.
         """
 
         prov_biospecimens = set(id_prov['HTAN_ASSAYED_BIOSPECIMEN_ID'].dropna().unique())
@@ -214,13 +225,21 @@ class HTANProvenanceValidator(BaseValidator):
         Validate panel ID linkage between File metadata and panel (channel) metadata.
 
         Args:
-            - df (pandas.DataFrame): Component-level metadata table.
-            - table_id (str): BigQuery table name.
-            - metadata_type (str): Metadata type (Files or Records).
-            - client (BigQuery instance): BigQuery client object.
+            df (pandas.DataFrame):
+                Component-level metadata table.
+
+            table_id (str):
+                BigQuery table name.
+
+            metadata_type (str):
+                Metadata type (Files or Records).
+
+            client (BigQuery instance):
+                BigQuery client object.
 
         Returns:
-            - df (pandas.DataFrame): Component-level metadata table.
+            df (pandas.DataFrame):
+                Component-level metadata table.
         """
 
         # Pull the reference table from BQ
@@ -284,10 +303,12 @@ class HTANProvenanceValidator(BaseValidator):
         Ensure that each HTAN_DATA_FILE_ID uniquely maps to a single file.
 
         Args:
-            - id_prov (pandas.DataFrame): Provenance table.
+            id_prov (pandas.DataFrame):
+                Provenance table.
 
         Returns:
-            - id_prov (pandas.DataFrame): Provenance table with appended errors.
+            id_prov (pandas.DataFrame):
+                Provenance table with appended errors.
         """
 
         # Normalize missing values
@@ -341,15 +362,25 @@ class HTANProvenanceValidator(BaseValidator):
         Execute all provenance validation checks for a given component.
 
         Args:
-            - client (BigQuery instance): BigQuery client object.
-            - df (pandas.DataFrame): Component-level metadata table.
-            - id_prov (pandas.DataFrame): Provenance table.
-            - metadata_type (str): Metadata type (Files or Records).
-            - component (str): Component being validated.
+            client (BigQuery instance):
+                BigQuery client object.
+
+            df (pandas.DataFrame):
+                Component-level metadata table.
+
+            id_prov (pandas.DataFrame):
+                Provenance table.
+
+            metadata_type (str):
+                Metadata type (Files or Records).
+
+            component (str):
+                Component being validated.
 
         Returns:
-            - df (pandas.DataFrame): Updated metadata table with errors logged.
-            - id_prov (pandas.DataFrame): Updated provenance table with errors logged.
+            tuple[pandas.DataFrame, pandas.DataFrame]:
+                - Updated metadata table with errors logged.
+                - Updated provenance table with errors logged.
         """
 
         # Initialize error columns

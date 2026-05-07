@@ -1,33 +1,24 @@
 """
-HTAN Validation: Base Class
+This module outlines the BaseValidator class, which serves as the
+foundation for all HTAN validation including:
 
-    This module outlines the BaseValidator class, which serves as the
-    foundation for all HTAN validation including:
-        - HTANComponentValidator
-        - HTANProvenanceValidator
+    - HTANComponentValidator
+    - HTANProvenanceValidator
 
-    and provides the following core utilities:
+and provides the following core utilities:
 
-        1. Initialize Release Validation columns in all metadata tables.
+    1. Initialize Release Validation columns in all metadata tables.
 
-        2. Retrieves REGEX patterns from stored HTAN Data Models.
+    2. Retrieves REGEX patterns from stored HTAN Data Models.
 
-        3. Parses BigQuery lists represented as strings.
+    3. Parses BigQuery lists represented as strings.
 
-        4. Provides a unified logging structure, ensuring the following
-        information is recorded for each error:
-            - Release_Validation_Passed (bool): Flag denoting release validation status
-            - Release_Validation_Timestamp (datetime): Time when data was evaluated.
-            - Release_Violations (list): List containing general error categories.
-            - Release_Error_Messages (list[dict]): List of detailed error messages,
-              where messages are formatted as dictionaries:
-                * Key = Error category
-                * Value = Detailed message
+    4. Provides a unified logging structure, ensuring the following information is recorded for each error:
 
-Author:       Yamina Katariya <ykatariy@systemsbiology.org> 
-Date Created: 04-01-2026
-Date Updated: 04-17-2026
-Modified By:
+        - Release_Validation_Passed (bool): Flag denoting release validation status
+        - Release_Validation_Timestamp (datetime): Time when data was evaluated.
+        - Release_Violations (list): List containing general error categories.
+        - Release_Error_Messages (list[dict]): List of detailed error messages, where messages are formatted as dictionaries.
 """
 
 import ast
@@ -46,10 +37,12 @@ class BaseValidator:
         standardized error reporting.
 
         Args:
-            - df (pandas.Dataframe): Component-level metadata table.
+            df (pandas.Dataframe):
+                Component-level metadata table.
 
         Returns:
-            - df (pandas.Dataframe): Component-level metadata table.
+            df (pandas.Dataframe):
+                Component-level metadata table.
         """
         if "Release_Validation_Passed" not in df.columns:
             df["Release_Validation_Passed"] = True
@@ -71,12 +64,18 @@ class BaseValidator:
         from the provided data model.
 
         Args:
-            - data_model (pandas.DataFrame): The versioned, tabular data model.
-            - component (str): The HTAN assay type (e.g., Biospecimen).
-            - htan_id (str): The attribute to retrieve the REGEX for.
+            data_model (pandas.DataFrame):
+                The versioned, tabular data model.
+
+            component (str):
+                The HTAN assay type (e.g., Biospecimen).
+
+            htan_id (str):
+                The attribute to retrieve the REGEX for.
 
         Returns:
-            - regex_pattern (re): The REGEX pattern of interest.
+            regex_pattern (re):
+                The REGEX pattern of interest.
         """
         row = data_model[
             (data_model["Component"] == component) &
@@ -91,10 +90,12 @@ class BaseValidator:
         Convert BigQuery stringified lists (possibly nested) into a proper Python list.
 
         Args:
-            - bq_list (str): The attribute of a BQ table to be converted from a string to a list.
+            bq_list (str):
+                The attribute of a BQ table to be converted from a string to a list.
 
         Returns:
-            - bq_list (list): The attribute of a BQ table as a list.
+            bq_list (list):
+                The attribute of a BQ table as a list.
         """
 
         # Unwrap nested stringified lists
@@ -119,13 +120,21 @@ class BaseValidator:
         Append an error to a specific row in the metadata table.
 
         Args:
-            - df (pandas.DataFrame): The metadata table being validated.
-            - idx (int): The row index where the error occurred.
-            - error_type (str): The standardized category of the error.
-            - message (str): Detailed information regarding the violation.
+            df (pandas.DataFrame):
+                The metadata table being validated.
+
+            idx (int):
+                The row index where the error occurred.
+
+            error_type (str):
+                The standardized category of the error.
+
+            message (str):
+                Detailed information regarding the violation.
 
         Returns:
-            - df (pandas.DataFrame): Dataframe with updated error logs.
+            df (pandas.DataFrame):
+                Dataframe with updated error logs.
         """
 
         # Set validation flag + timestamp
@@ -150,13 +159,21 @@ class BaseValidator:
         Get an entire table from BigQuery as a Pandas DataFrame.
 
         Args:
-            - client (BigQuery instance): A BigQuery client object.
-            - project_id (str): BigQuery project name.
-            - dataset_id (str): BigQuery dataset name.
-            - table_id (str): BigQuery table name.
+            client (BigQuery instance):
+                A BigQuery client object.
+
+            project_id (str):
+                BigQuery project name.
+
+            dataset_id (str):
+                BigQuery dataset name.
+
+            table_id (str):
+                BigQuery table name.
         
         Returns:
-            - (pandas.DataFrame): The BigQuery table as a dataframe.
+            (pandas.DataFrame):
+                The BigQuery table as a dataframe.
         """
         query = f"""
             SELECT {attrs}
@@ -170,10 +187,12 @@ class BaseValidator:
         pulled and saved in tabular form as CSVs.
 
         Args:
-            - schema_ver (str): The version number of the data model.
+            schema_ver (str):
+                The version number of the data model.
         
         Returns:
-            - (pandas.DataFrame): The loaded data model.
+            (pandas.DataFrame):
+                The loaded data model.
         """
         schema_ver = schema_ver.replace(".", "_")
         model = self.query_bigquery_table(
