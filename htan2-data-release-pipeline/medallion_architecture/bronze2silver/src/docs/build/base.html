@@ -1,0 +1,290 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Base Validator &mdash; HTAN Phase 2 Data Release Validation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/css/customWidth.css?v=c9aa5cfe" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="author" title="About these documents" href="about.html" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Component Validator" href="component.html" />
+    <link rel="prev" title="Support" href="support.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            HTAN Phase 2 Data Release Validation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">General</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="about.html">About</a></li>
+<li class="toctree-l1"><a class="reference internal" href="support.html">Support</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Release Validation</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Base Validator</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#htan_validators.base_validator.BaseValidator"><code class="docutils literal notranslate"><span class="pre">BaseValidator</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#htan_validators.base_validator.BaseValidator.append_error"><code class="docutils literal notranslate"><span class="pre">BaseValidator.append_error()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#htan_validators.base_validator.BaseValidator.break_bq_list"><code class="docutils literal notranslate"><span class="pre">BaseValidator.break_bq_list()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#htan_validators.base_validator.BaseValidator.get_regex"><code class="docutils literal notranslate"><span class="pre">BaseValidator.get_regex()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#htan_validators.base_validator.BaseValidator.get_versioned_data_model"><code class="docutils literal notranslate"><span class="pre">BaseValidator.get_versioned_data_model()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#htan_validators.base_validator.BaseValidator.initialize_columns"><code class="docutils literal notranslate"><span class="pre">BaseValidator.initialize_columns()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#htan_validators.base_validator.BaseValidator.query_bigquery_table"><code class="docutils literal notranslate"><span class="pre">BaseValidator.query_bigquery_table()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#htan_validators.base_validator.BaseValidator.validate"><code class="docutils literal notranslate"><span class="pre">BaseValidator.validate()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="component.html">Component Validator</a></li>
+<li class="toctree-l1"><a class="reference internal" href="provenance.html">Provenance Validator</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">HTAN Phase 2 Data Release Validation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Base Validator</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/base.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-htan_validators.base_validator">
+<span id="base-validator"></span><h1>Base Validator<a class="headerlink" href="#module-htan_validators.base_validator" title="Link to this heading"></a></h1>
+<p>This module outlines the BaseValidator class, which serves as the
+foundation for all HTAN validation including:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>HTANComponentValidator</p></li>
+<li><p>HTANProvenanceValidator</p></li>
+</ul>
+</div></blockquote>
+<p>and provides the following core utilities:</p>
+<blockquote>
+<div><ol class="arabic">
+<li><p>Initialize Release Validation columns in all metadata tables.</p></li>
+<li><p>Retrieves REGEX patterns from stored HTAN Data Models.</p></li>
+<li><p>Parses BigQuery lists represented as strings.</p></li>
+<li><p>Provides a unified logging structure, ensuring the following information is recorded for each error:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Release_Validation_Passed (bool): Flag denoting release validation status</p></li>
+<li><p>Release_Validation_Timestamp (datetime): Time when data was evaluated.</p></li>
+<li><p>Release_Violations (list): List containing general error categories.</p></li>
+<li><p>Release_Error_Messages (list[dict]): List of detailed error messages, where messages are formatted as dictionaries.</p></li>
+</ul>
+</div></blockquote>
+</li>
+</ol>
+</div></blockquote>
+<dl class="py class">
+<dt class="sig sig-object py" id="htan_validators.base_validator.BaseValidator">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">htan_validators.base_validator.</span></span><span class="sig-name descname"><span class="pre">BaseValidator</span></span><a class="headerlink" href="#htan_validators.base_validator.BaseValidator" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Base class for HTAN validators. Provides core utilities for error logging
+and general helper functions.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="htan_validators.base_validator.BaseValidator.append_error">
+<span class="sig-name descname"><span class="pre">append_error</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">idx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">error_type</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">message</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#htan_validators.base_validator.BaseValidator.append_error" title="Link to this definition"></a></dt>
+<dd><p>Append an error to a specific row in the metadata table.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>df</strong> (<em>pandas.DataFrame</em>) – The metadata table being validated.</p></li>
+<li><p><strong>idx</strong> (<em>int</em>) – The row index where the error occurred.</p></li>
+<li><p><strong>error_type</strong> (<em>str</em>) – The standardized category of the error.</p></li>
+<li><p><strong>message</strong> (<em>str</em>) – Detailed information regarding the violation.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Dataframe with updated error logs.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>df (pandas.DataFrame)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="htan_validators.base_validator.BaseValidator.break_bq_list">
+<span class="sig-name descname"><span class="pre">break_bq_list</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bq_list</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#htan_validators.base_validator.BaseValidator.break_bq_list" title="Link to this definition"></a></dt>
+<dd><p>Convert BigQuery stringified lists (possibly nested) into a proper Python list.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>bq_list</strong> (<em>str</em>) – The attribute of a BQ table to be converted from a string to a list.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The attribute of a BQ table as a list.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>bq_list (list)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="htan_validators.base_validator.BaseValidator.get_regex">
+<span class="sig-name descname"><span class="pre">get_regex</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data_model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">component</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">htan_id</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#htan_validators.base_validator.BaseValidator.get_regex" title="Link to this definition"></a></dt>
+<dd><p>Retrieves the REGEX patterns for specific attributes
+from the provided data model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data_model</strong> (<em>pandas.DataFrame</em>) – The versioned, tabular data model.</p></li>
+<li><p><strong>component</strong> (<em>str</em>) – The HTAN assay type (e.g., Biospecimen).</p></li>
+<li><p><strong>htan_id</strong> (<em>str</em>) – The attribute to retrieve the REGEX for.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The REGEX pattern of interest.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>regex_pattern (re)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="htan_validators.base_validator.BaseValidator.get_versioned_data_model">
+<span class="sig-name descname"><span class="pre">get_versioned_data_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">client</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">schema_ver</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#htan_validators.base_validator.BaseValidator.get_versioned_data_model" title="Link to this definition"></a></dt>
+<dd><p>Loads a specific version of the data model from that data models
+pulled and saved in tabular form as CSVs.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>schema_ver</strong> (<em>str</em>) – The version number of the data model.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The loaded data model.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>(pandas.DataFrame)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="htan_validators.base_validator.BaseValidator.initialize_columns">
+<span class="sig-name descname"><span class="pre">initialize_columns</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#htan_validators.base_validator.BaseValidator.initialize_columns" title="Link to this definition"></a></dt>
+<dd><p>Ensure all Release_* columns exist in the metadata tables for
+standardized error reporting.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>df</strong> (<em>pandas.Dataframe</em>) – Component-level metadata table.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Component-level metadata table.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>df (pandas.Dataframe)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="htan_validators.base_validator.BaseValidator.query_bigquery_table">
+<span class="sig-name descname"><span class="pre">query_bigquery_table</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">client</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">table_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">attrs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'*'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#htan_validators.base_validator.BaseValidator.query_bigquery_table" title="Link to this definition"></a></dt>
+<dd><p>Get an entire table from BigQuery as a Pandas DataFrame.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>client</strong> (<em>BigQuery instance</em>) – A BigQuery client object.</p></li>
+<li><p><strong>project_id</strong> (<em>str</em>) – BigQuery project name.</p></li>
+<li><p><strong>dataset_id</strong> (<em>str</em>) – BigQuery dataset name.</p></li>
+<li><p><strong>table_id</strong> (<em>str</em>) – BigQuery table name.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The BigQuery table as a dataframe.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>(pandas.DataFrame)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="htan_validators.base_validator.BaseValidator.validate">
+<span class="sig-name descname"><span class="pre">validate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#htan_validators.base_validator.BaseValidator.validate" title="Link to this definition"></a></dt>
+<dd><p>Abstract method to be implemented by subclasses.
+Executes the specific validation logic for the component.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="support.html" class="btn btn-neutral float-left" title="Support" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="component.html" class="btn btn-neutral float-right" title="Component Validator" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, HTAN Consortium.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
