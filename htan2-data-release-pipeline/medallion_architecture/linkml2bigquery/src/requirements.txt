@@ -6,4 +6,3 @@ google-cloud-storage>=2.16
 db-dtypes>=1.2
 PyYAML>=6.0
 PyJWT>=2.12.1
-
