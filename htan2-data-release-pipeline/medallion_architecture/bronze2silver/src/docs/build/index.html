@@ -1,0 +1,172 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HTAN Phase 2 Data Release Validation &mdash; HTAN Phase 2 Data Release Validation  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/css/customWidth.css?v=c9aa5cfe" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="author" title="About these documents" href="about.html" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="About" href="about.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="#" class="icon icon-home">
+            HTAN Phase 2 Data Release Validation
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">General</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="about.html">About</a></li>
+<li class="toctree-l1"><a class="reference internal" href="support.html">Support</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Release Validation</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="base.html">Base Validator</a></li>
+<li class="toctree-l1"><a class="reference internal" href="component.html">Component Validator</a></li>
+<li class="toctree-l1"><a class="reference internal" href="provenance.html">Provenance Validator</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="#">HTAN Phase 2 Data Release Validation</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="#" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">HTAN Phase 2 Data Release Validation</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/index.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="htan-phase-2-data-release-validation">
+<h1>HTAN Phase 2 Data Release Validation<a class="headerlink" href="#htan-phase-2-data-release-validation" title="Link to this heading"></a></h1>
+<p>The release validation process performs automated quality control checks on submitted metadata and generates validation reports that are used to assess release readiness. The workflow validates both file-level and record-set-level metadata, appends validation results to metadata tables, and generates centralized error indexing tables for downstream review in BigQuery.</p>
+<section id="validation-workflow">
+<h2>Validation Workflow<a class="headerlink" href="#validation-workflow" title="Link to this heading"></a></h2>
+<p>The release validation pipeline performs the following steps:</p>
+<ol class="arabic simple">
+<li><p>Loads metadata and provenance tables from BigQuery</p></li>
+<li><p>Retrieves the current exclusion list</p></li>
+<li><p>Collects schema validation results generated during metadata curation</p></li>
+<li><p>Runs component-level validation checks</p></li>
+<li><p>Runs provenance and cross-center validation checks</p></li>
+<li><p>Appends validation results and error messages to metadata tables</p></li>
+<li><p>Generates centralized error indexing tables for files and record sets</p></li>
+<li><p>Writes validated outputs back to BigQuery</p></li>
+</ol>
+</section>
+<section id="validation-categories">
+<h2>Validation Categories<a class="headerlink" href="#validation-categories" title="Link to this heading"></a></h2>
+<p>The release process combines results from three validation categories:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Validation Category</p></th>
+<th class="head"><p>Description</p></th>
+<th class="head"><p>Owner</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Curator Validation</p></td>
+<td><p>Schema-based validation results generated during metadata curation</p></td>
+<td><p>Synapse</p></td>
+</tr>
+<tr class="row-odd"><td><p>Base Validation</p></td>
+<td><p>Error reporting and formatting</p></td>
+<td><p>HTAN BigQuery</p></td>
+</tr>
+<tr class="row-even"><td><p>Component Validation</p></td>
+<td><p>Validation of identifier structure, required fields, duplicates, and metadata consistency</p></td>
+<td><p>HTAN BigQuery</p></td>
+</tr>
+<tr class="row-odd"><td><p>Provenance Validation</p></td>
+<td><p>Cross-table validation of relationships and dependencies between metadata entities</p></td>
+<td><p>HTAN BigQuery</p></td>
+</tr>
+</tbody>
+</table>
+<p>Each metadata entry receives structured error reporting, along with aggregated validation messages and error types, via the <a class="reference internal" href="base.html"><span class="doc">Base Validator</span></a>.</p>
+<p>For more information regarding the HTAN BigQuery Release Validation categories, please see <a class="reference internal" href="component.html"><span class="doc">Component Validator</span></a> and <a class="reference internal" href="provenance.html"><span class="doc">Provenance Validator</span></a>.</p>
+</section>
+<section id="exclusion-list-handling">
+<h2>Exclusion List Handling<a class="headerlink" href="#exclusion-list-handling" title="Link to this heading"></a></h2>
+<p>The pipeline loads a centrally maintained exclusion list containing files that should be excluded from the pending release. Excluded files are tracked separately and incorporated into validation results.</p>
+<p>HTAN Centers may add items to the exclusion list via the <a class="reference external" href="https://htan2-exclusion-list-app-899713014598.us-west1.run.app/">HTAN Exclusion Request Portal</a>.</p>
+<div class="toctree-wrapper compound">
+</div>
+<div class="toctree-wrapper compound">
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="about.html" class="btn btn-neutral float-right" title="About" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, HTAN Consortium.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
