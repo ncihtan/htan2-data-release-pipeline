@@ -459,6 +459,7 @@ def main():
     record_error_table = pd.DataFrame(record_error_rows)
     record_error_table = record_error_table.drop_duplicates(
         subset=['Component',
+                'Record_EntityId',
                 'Folder_EntityId',
                 'HTAN_Center',
                 'HTAN_PARTICIPANT_ID',
