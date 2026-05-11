@@ -357,6 +357,7 @@ def main():
                 record_error_rows.append({
                     "Component": row['Component'],
                     "Folder_EntityId": row['Folder_EntityId'],
+                    "Record_EntityId": row['Record_EntityId'],
                     "HTAN_Center": row['HTAN_Center'],
                     "HTAN_PARTICIPANT_ID": row.get("HTAN_PARTICIPANT_ID", None),
                     "HTAN_BIOSPECIMEN_ID": row.get("HTAN_BIOSPECIMEN_ID", None),
