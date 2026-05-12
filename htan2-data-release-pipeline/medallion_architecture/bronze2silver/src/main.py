@@ -23,8 +23,8 @@ Functions:
 
 Author:       Yamina Katariya <ykatariy@systemsbiology.org>
 Date Created: 04-01-2026
-Date Updated: 04-17-2026
-Modified By:  
+Date Updated: 05-12-2026
+Modified By:  Dar'ya Pozhidayeva
 """
 
 from datetime import datetime
@@ -299,7 +299,8 @@ def main():
                         "MISSING_HTAN_ID",
                         "DUPLICATE_HTAN_ID",
                         "INVALID_SYNAPSE_ID",
-                        "EXCLUDED_FILE"]
+                        "EXCLUDED_FILE",
+                        "SMALL_FILE_SIZE_WARNING"]
 
     provenance_errors = ["MISSING_CENTER_RECORD",
                          "MISSING_DEMOGRAPHICS",
