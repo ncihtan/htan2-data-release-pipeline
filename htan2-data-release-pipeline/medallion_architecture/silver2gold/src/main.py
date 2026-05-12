@@ -6,7 +6,7 @@ Medallion Architecture: Silver to Gold
 Author: Dar'ya Pozhidayeva, Yamina Katariya
 Updated: 05/06/2026
 """
-
+import pandas as pd
 from client_load import (
     load_bq,
     init_bq_client
@@ -45,24 +45,15 @@ def query_bigquery_table(client, project_id, dataset_id, table_id):
     """
     return client.query(query).to_dataframe()
 
-def query_bigquery_table(client, project_id, dataset_id, table_id):
+def print_sub_section(title):
     """
-    Get an entire table from BigQuery as a Pandas DataFrame.
+    Print subsection headers.
 
     Args:
-        - client (BigQuery instance): A BigQuery client object.
-        - project_id (str): BigQuery project name.
-        - dataset_id (str): BigQuery dataset name.
-        - table_id (str): BigQuery table name.
-    
-    Returns:
-        - (pandas.DataFrame): The BigQuery table as a dataframe.
+        - title (string): The title to be printed.
     """
-    query = f"""
-        SELECT *
-        FROM `{project_id}.{dataset_id}.{table_id}`
-    """
-    return client.query(query).to_dataframe()
+    border = "=" * (len(title) + 8)
+    print(f"\n{border}\n>>> {title.upper()} <<<\n{border}\n")
 
 def main():
     """
@@ -71,21 +62,39 @@ def main():
     # Initialize BQ Client
     client = init_bq_client()
     
+    print_sub_section("PULLING FOLDER INFORMATION")
     #---------------------------------------------------------------------------------
+    file_folder_information = f"""
+        SELECT File_EntityId, Folder_EntityId, Status_Folder_Name
+        FROM `{PROJECT}.{RAW_DATASET}.raw_INDEXING_TABLE_All_Files_With_Validation_Status`
+    """
+    files_folders = client.query(file_folder_information).to_dataframe()
+    
+    
     file_validation_query = f"""
         SELECT *
         FROM `{PROJECT}.{SILVER_DATASET}.silver_INDEXING_TABLE_All_File_Errors`
     """
-    passed_file_validation_table = client.query(file_validation_query).to_dataframe()
+    file_validation_table = client.query(file_validation_query).to_dataframe()
+    file_validation_table = pd.merge(file_validation_table, files_folders, on=['File_EntityId'], how='inner')
+    
+    #---------------------------------------------------------------------------------
+    record_folder_information = f"""
+        SELECT Record_EntityId, Folder_EntityId, Status_Folder_Name
+        FROM `{PROJECT}.{RAW_DATASET}.raw_INDEXING_TABLE_All_RecordSets_With_Validation_Status`
+    """
+    record_folders = client.query(record_folder_information).to_dataframe()
 
     record_validation_query = f"""
         SELECT *
         FROM `{PROJECT}.{SILVER_DATASET}.silver_INDEXING_TABLE_All_Record_Errors`
     """
-    passed_record_validation_table = client.query(record_validation_query).to_dataframe()
+    record_validation_table = client.query(record_validation_query).to_dataframe()
+    record_validation_table = pd.merge(record_validation_table, record_folders, on=['Record_EntityId'], how='inner')
 
+
+    print_sub_section("FETCHING BYPASS TABLE FOR RELEASE")
     #---------------------------------------------------------------------------------
-
     #VALIDATION BYPASS TABLES
     bypass_file_query = f"""
         SELECT *
@@ -102,9 +111,11 @@ def main():
         """
     bypass_records = client.query(bypass_record_query).to_dataframe()
 
+
+    print_sub_section("STAGING RELEASE FILES AND RECORDS")
     #---------------------------------------------------------------------------------
-    release_staged_files = passed_file_validation_table[(passed_file_validation_table['Validation_Completion'] == '3/3') | 
-                                                        (passed_file_validation_table['File_EntityId'].isin(bypass_files))]
+    release_staged_files = file_validation_table[(file_validation_table['Validation_Completion'] == '3/3') | 
+                                                        (file_validation_table['File_EntityId'].isin(bypass_files))]
     
     match_cols = [
         'Record_EntityId', 
@@ -115,7 +126,7 @@ def main():
     bypass_temp = bypass_records[match_cols].drop_duplicates()
     bypass_temp['is_bypass'] = True
     
-    merged_table = passed_record_validation_table.merge(
+    merged_table = record_validation_table.merge(
         bypass_temp, 
         on=match_cols,
         how='left')
@@ -124,15 +135,19 @@ def main():
         (merged_table['Validation_Completion'] == '3/3') | 
         (merged_table['is_bypass'] == True)
     ].drop(columns=['is_bypass'])
+    
+    
     #---------------------------------------------------------------------------------
-    #
+    print_sub_section("PRODUCING FILTERED COMPONENT-LEVEL-TABLES")
+    
     silver_tables = list(client.list_tables(f"{PROJECT}.{SILVER_DATASET}"))
     silver_metadata = [
         table.table_id
         for table in silver_tables
         if table.table_id.startswith("silver_METADATA_TABLE_All_")]
     
-    for table_id in silver_metadata:                
+    for table_id in silver_metadata:
+        print("Staging: "  +  table_id)                
         metadata_type = table_id.split("_")[4]
         component = table_id.split("_")[5]
         
@@ -168,31 +183,61 @@ def main():
                 table_name,
                 df
             )
-        
+        #---------------------------------------------------------------------------------
 
-        #File level validated files - push to BQ
-    passed_file_validation_table
-    cols_to_drop = [col for col in passed_file_validation_table.columns if any(val_column in col for val_column in validation_columns)]
-    passed_file_validation_table = passed_file_validation_table.drop(columns=cols_to_drop)
+    print_sub_section("GENERATING SUMMARY LEVEL-TABLES")
+
+    #File level validated files - push to BQ
+    release_staged_files
+    cols_to_drop = [col for col in release_staged_files.columns if any(val_column in col for val_column in validation_columns)]
+    release_staged_files = release_staged_files.drop(columns=cols_to_drop)
+    
     load_bq(
                 client,
                 PROJECT,
                 GOLD_DATASET,
                 "gold_INDEXING_TABLE_All_File_Validation_Passed",
-                passed_file_validation_table
+                release_staged_files
             )
+    
+    #---------------------------------------------------------------------------------
+    summary_count_files = release_staged_files.groupby(['Component', 'HTAN_Center', 'Status_Folder_Name']).size().reset_index(name='Files_Staged')
+    
+    load_bq(
+                client,
+                PROJECT,
+                GOLD_DATASET,
+                "gold_INDEXING_TABLE_All_File_Validation_Passed_File_Counts",
+                summary_count_files
+            )
+    #---------------------------------------------------------------------------------
 
-        #Record level validated files - push to BQ
-    passed_record_validation_table
-    cols_to_drop = [col for col in passed_record_validation_table.columns if any(val_column in col for val_column in validation_columns)]
-    passed_record_validation_table = passed_record_validation_table.drop(columns=cols_to_drop)
+    #Record level validated files - push to BQ
+    release_staged_records
+    cols_to_drop = [col for col in release_staged_records.columns if any(val_column in col for val_column in validation_columns)]
+    release_staged_records = release_staged_records.drop(columns=cols_to_drop)
+    #---------------------------------------------------------------------------------
     load_bq(
                 client,
                 PROJECT,
                 GOLD_DATASET,
                 "gold_INDEXING_TABLE_All_Record_Validation_Passed",
-                passed_record_validation_table
+                release_staged_records
             )
+    #---------------------------------------------------------------------------------
+
+    summary_count_records = release_staged_records.groupby(['Component', 'HTAN_Center', 'Status_Folder_Name']).size().reset_index(name='Files_Staged')
+    
+    load_bq(
+                client,
+                PROJECT,
+                GOLD_DATASET,
+                "gold_INDEXING_TABLE_All_File_Validation_Passed_RecordSet_Counts",
+                summary_count_records
+            )
+    #---------------------------------------------------------------------------------
+    print_sub_section("FETCHING AND UPDATING LATEST DATA MODEL TABLE")
+
     # Get all data models from BQ
     data_models = list(client.list_tables(f"{PROJECT}.{DM_DATASET}"))
     dm_versions = [
@@ -224,6 +269,7 @@ def main():
             latest_model
         )
 
+    
 
 if __name__ == "__main__":
     main()
