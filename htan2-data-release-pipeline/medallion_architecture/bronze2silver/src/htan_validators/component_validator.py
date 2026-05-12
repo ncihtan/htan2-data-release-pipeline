@@ -1,40 +1,34 @@
 """
-HTAN Validation: Component
+This module outlines the HTANComponentValidator class, which inherits
+the BaseValidator class. The HTANComponentValidator provides the
+following checks on component-specific metadata tables:
 
-    This module outlines the HTANComponentValidator class, which inherits
-    the BaseValidator class. The HTANComponentValidator provides the
-    following checks on component-specific metadata tables:
+    1. **Primary Key Integrity:** Verifies that required HTAN identifiers 
+    (like Data File, Biospecimen, or Participant IDs) are present (not null)
+    and unique across individual metadata tables.
 
-        1. Primary Key Integrity: Verifies that required HTAN identifiers 
-        (like Data File, Biospecimen, or Participant IDs) are present (not null)
-        and unique across individual metadata tables.
+    2. **Synapse ID Authenticity:** Pings the Synapse platform to ensure that
+    the provided Synapse IDs actually exist and are accessible.
 
-        2. Synapse ID Authenticity: Pings the Synapse platform to ensure that
-        the provided Synapse IDs actually exist and are accessible.
-            - File_EntityId
-            - FolderEntityId
-            - CHANNEL_METADATA_ID
-            - PANEL_SYNAPSE_ID
+        - File_EntityId
+        - Folder_EntityId
 
-        3. ID Format (REGEX) Matching: Validates that HTAN IDs follow specific
-        naming conventions.
-            - Biospecimen Parent IDs are all existing Biospecimen or Participant IDs
-            - Level 1 Sequencing and Level 2 Imaging Parent IDs are Biospecimen IDs
-            - Level 2 (expect Imaging), Level 3, and Level 4 Parent IDs are Data File IDs
+    3. **ID Format (REGEX) Matching:** Validates that HTAN IDs follow specific
+    naming conventions.
 
-        4. Internal ID Linkage: Ensures that IDs referenced in one column actually
-        exist in the corresponding primary ID column within the same component table.
-            - ADJACENT_BIOSPECIMEN_ID exist in HTAN_BIOSPECIMEN_ID in the Biospecimen Component
-            - HTAN_PARENT_ID exist in HTAN_BIOSPECIMEN_ID in the Biospecimen Component
+        - Biospecimen Parent IDs are all existing Biospecimen or Participant IDs
+        - Level 1 Sequencing and Level 2 Imaging Parent IDs are Biospecimen IDs
+        - Level 2 (expect Imaging), Level 3, and Level 4 Parent IDs are Data File IDs
 
-        5. Exclusion List Cross-Referencing: Compares the files uploaded to Synapse to
-        those submitted to the Exclusion List Request Form, and flags any files marked
-        for exclusion.
+    4. **Internal ID Linkage:** Ensures that IDs referenced in one column actually
+    exist in the corresponding primary ID column within the same component table.
 
-Author:       Yamina Katariya <ykatariy@systemsbiology.org> 
-Date Created: 04-01-2026
-Date Updated: 05-12-2026
-Modified By:  Dar'ya Pozhidayeva
+        - ADJACENT_BIOSPECIMEN_ID exist in HTAN_BIOSPECIMEN_ID in the Biospecimen Component
+        - HTAN_PARENT_ID exist in HTAN_BIOSPECIMEN_ID in the Biospecimen Component
+
+    5. **Exclusion List Cross-Referencing:** Compares the files uploaded to Synapse to
+    those submitted to the Exclusion List Request Form, and flags any files marked
+    for exclusion. 
 """
 
 import re
@@ -53,13 +47,21 @@ class HTANComponentValidator(BaseValidator):
         Validates strings in a column against one for more regex patterns.
 
         Args:
-            - df (pandas.Dataframe): Component-level metadata table.
-            - regex_pattern (str or list): The regex pattern(s) to match against.
-            - regex_attr (str or list): The name of the attribute(s) for error logging.
-            - htan_col (str): The column name containing the IDs to check
+            df (pandas.Dataframe):
+                Component-level metadata table.
+
+            regex_pattern (str or list):
+                The regex pattern(s) to match against.
+
+            regex_attr (str or list):
+                The name of the attribute(s) for error logging.
+
+            htan_col (str):
+                The column name containing the IDs to check
 
         Returns:
-            - df (pandas.Dataframe): Component-level metadata table.
+            df (pandas.Dataframe):
+                Component-level metadata table.
         """
 
         # Ensure patterns and attributes are lists for iteration
@@ -109,14 +111,24 @@ class HTANComponentValidator(BaseValidator):
         in the same table.
 
         Args:
-            - df (pandas.DataFrame): Component-level metadata table.
-            - source_col (str): Column containing the IDs that need to be validated.
-            - reference_col (str): Column containing the set of valid IDs for source_col.
-            - ids_to_check (list, optional): Specific IDs to validate for a single row.
-            - idx (int, optional): The specific row index if ids_to_check is provided.
+            df (pandas.DataFrame):
+                Component-level metadata table.
+
+            source_col (str):
+                Column containing the IDs that need to be validated.
+
+            reference_col (str):
+                Column containing the set of valid IDs for source_col.
+
+            ids_to_check (list, optional):
+                Specific IDs to validate for a single row.
+
+            idx (int, optional):
+                The specific row index if ids_to_check is provided.
         
         Returns:
-            - df (pandas.DataFrame): Component-level metadata table.
+            df (pandas.DataFrame):
+                Component-level metadata table.
         """
 
         # Get a unique set of reference IDs
@@ -158,12 +170,18 @@ class HTANComponentValidator(BaseValidator):
         the component level.
 
         Args:
-            - df (pandas.DataFrame): Component-level metadata table.
-            - metadata_type (str): Synapse structure annotation type (Files or Records).
-            - component (str): The HTAN assay type (e.g. Biospecimen)
+            df (pandas.DataFrame):
+                Component-level metadata table.
 
-        Return:
-            - df (pandas.DataFrame): Component-level metadata table.
+            metadata_type (str):
+                Synapse structure annotation type (Files or Records).
+
+            component (str):
+                The HTAN assay type (e.g. Biospecimen)
+
+        Returns:
+            df (pandas.DataFrame):
+                Component-level metadata table.
         """
 
         # Assign required HTAN Id based on metadata type and component
@@ -212,11 +230,15 @@ class HTANComponentValidator(BaseValidator):
         REGEX in the data model and component-specific requirements.
 
         Args:
-            - df (pandas.DataFrame): Component-level metadata table.
-            - component (str): The HTAN assay type (e.g. Biospecimen)
+            df (pandas.DataFrame):
+                Component-level metadata table.
+
+            component (str):
+                The HTAN assay type (e.g. Biospecimen)
 
         Returns:
-            - df (pandas.DataFrame): Component-level metadata table.
+            df (pandas.DataFrame):
+                Component-level metadata table.
         """
 
         # Get the latest schema version for uploaded data
@@ -266,12 +288,18 @@ class HTANComponentValidator(BaseValidator):
         Verifies that provided Synapse IDs are active Synapse entities.
 
         Args:
-            - syn (Synapse instance): Synapse client object.
-            - df (pandas.DataFrame): Component-level metadata table.
-            - syn_ids_col (str): Name of column containing Synapse IDs to be validated.
+            syn (Synapse instance):
+                Synapse client object.
+
+            df (pandas.DataFrame):
+                Component-level metadata table.
+
+            syn_ids_col (str):
+                Name of column containing Synapse IDs to be validated.
 
         Returns:
-            - df (pandas.DataFrame): Component-level metadata table.
+            df (pandas.DataFrame):
+                Component-level metadata table.
         """
 
         # Get unique list of Synapse IDs
@@ -303,11 +331,15 @@ class HTANComponentValidator(BaseValidator):
         Cross-reference files against the Exclusion List to be marked for exclusion.
 
         Args:
-            - df (pandas.DataFrame): Component-level metadata table.
-            - exclusion_list (pandas.DataFrame): Exclusion list passed as a dataframe.
+            df (pandas.DataFrame):
+                Component-level metadata table.
+
+            exclusion_list (pandas.DataFrame):
+                Exclusion list passed as a dataframe.
 
         Returns:
-            - df (pandas.DataFrame): Component-level metadata table.
+            df (pandas.DataFrame):
+                Component-level metadata table.
         """
         if exclusion_list is None or exclusion_list.empty:
             return df
@@ -344,47 +376,6 @@ class HTANComponentValidator(BaseValidator):
             )
 
         return df
-    
-    
-    def check_file_size(self, df):
-        """
-        Verifies that provided filesize in synapse matches cut-offs for corrupted files. 
-
-        Args:
-            - df (pandas.DataFrame): Component-level metadata table.
-            - syn_ids_col (str): Name of column containing Synapse IDs.
-            - syn_filesize (str): Name of column containing file sizes to be validated.
-
-        Returns:
-            - df (pandas.DataFrame): Component-level metadata table.
-        """
-        syn_ids_col = "File_EntityId"
-        syn_filesize = "File_Size_Bytes"
-        syn_filetype = "FILE_FORMAT"
-        
-        numeric_sizes = pd.to_numeric(df[syn_filesize], errors="coerce")        
-        formats = df[syn_filetype].astype(str).str.lower().str.strip()
-        
-        #Define the types of files to be checked for sizes.
-        large_formats = ["fastq", "bam", "ome-tiff", "tiff", "gzip"]
-        tabular_formats = ["csv", "tsv", "txt"]
-        
-        mask_large = formats.isin(large_formats) & (numeric_sizes <= 1000000)
-        mask_tabular = formats.isin(tabular_formats) & (numeric_sizes <= 100)
-        mask_zero = numeric_sizes == 0
-        invalid_mask = mask_large | mask_tabular | mask_zero   
-        
-        for idx in df[invalid_mask].index:
-                    self.append_error(
-                        df,
-                        idx,
-                        error_type="SMALL_FILE_SIZE_WARNING",
-                        message=f"{df.at[idx, syn_ids_col]} is {df.at[idx, syn_filesize]} bytes (format: {df.at[idx, syn_filetype]})! This may be a corrupted file. Must be checked before release."
-                    )
-
-        return df
-    
-    
 
     def validate(self, df, syn, client, metadata_type, component, exclusion_list):
         """
@@ -392,14 +383,24 @@ class HTANComponentValidator(BaseValidator):
         a component-level dataframe.
 
         Args:
-            - df (pandas.DataFrame): Component-level metadata table.
-            - syn (Synapse instance): Synapse client object.
-            - metadata_type (str): Synapse structure annotation type (Files or Records).
-            - component (str): The HTAN assay type (e.g. Biospecimen)
-            - exclusion_list (pandas.DataFrame): Exclusion list passed as a dataframe.
+            df (pandas.DataFrame):
+                Component-level metadata table.
+
+            syn (Synapse instance):
+                Synapse client object.
+
+            metadata_type (str):
+                Synapse structure annotation type (Files or Records).
+
+            component (str):
+                The HTAN assay type (e.g. Biospecimen)
+
+            exclusion_list (pandas.DataFrame):
+                Exclusion list passed as a dataframe.
 
         Returns:
-            - df (pandas.DataFrame): Component-level metadata table.
+            df (pandas.DataFrame):
+                Component-level metadata table.
         """
         # Initialize error columns
         df = self.initialize_columns(df)
@@ -430,12 +431,5 @@ class HTANComponentValidator(BaseValidator):
             # Cross-reference exclusion list (#5)
             if metadata_type == "Files":
                 df = self.check_excluded_files(df, exclusion_list)
-            # Check to see if the file size is suspicious
-            if metadata_type == "Files" and component != "SpatialLevel3":
-                df = self.check_file_size(df)
-
-                
-                
-
 
         return df
