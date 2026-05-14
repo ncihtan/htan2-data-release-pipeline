@@ -2,7 +2,17 @@
 # -*- coding: utf-8 -*-
 """
 Medallion Architecture: Silver to Gold
+    The module is responsible for the SILVER to GOLD transition of
+    the medallion architecture. It applies filtering logic on 
+    all HTAN2 metadata, and generates release candidate 
+    tables for both Files and Record Sets. 
 
+Configurations: None
+
+Functions:
+    - query_bigquery_table(client, project_id, dataset_id, table_id)
+    - print_sub_section(title)
+    
 Author: Dar'ya Pozhidayeva, Yamina Katariya
 Updated: 05/06/2026
 """
@@ -11,11 +21,9 @@ from client_load import (
     load_bq,
     init_bq_client
 )
-
 #####################################################
 #             SETTING GLOBAL VARIABLES
 #####################################################
-
 PROJECT = "htan2-dcc"
 RAW_DATASET = "htan2_synapse_raw"
 SILVER_DATASET = "htan2_medallion_silver"
@@ -62,33 +70,40 @@ def main():
     # Initialize BQ Client
     client = init_bq_client()
     
-    print_sub_section("PULLING FOLDER INFORMATION")
+    print_sub_section("PULLING FILE FOLDER INFORMATION")
     #---------------------------------------------------------------------------------
     file_folder_information = f"""
         SELECT File_EntityId, Folder_EntityId, Status_Folder_Name
         FROM `{PROJECT}.{RAW_DATASET}.raw_INDEXING_TABLE_All_Files_With_Validation_Status`
     """
+    print(file_folder_information)
+
     files_folders = client.query(file_folder_information).to_dataframe()
-    
     
     file_validation_query = f"""
         SELECT *
         FROM `{PROJECT}.{SILVER_DATASET}.silver_INDEXING_TABLE_All_File_Errors`
     """
+    print(file_validation_query)
+
     file_validation_table = client.query(file_validation_query).to_dataframe()
-    file_validation_table = pd.merge(file_validation_table, files_folders, on=['File_EntityId'], how='inner')
     
+    file_validation_table = pd.merge(file_validation_table, files_folders, on=['File_EntityId'], how='inner')
+
+    print_sub_section("PULLING RECORD FOLDER INFORMATION")
     #---------------------------------------------------------------------------------
     record_folder_information = f"""
         SELECT Record_EntityId, Folder_EntityId, Status_Folder_Name
         FROM `{PROJECT}.{RAW_DATASET}.raw_INDEXING_TABLE_All_RecordSets_With_Validation_Status`
     """
+    print(record_folder_information)
     record_folders = client.query(record_folder_information).to_dataframe()
 
     record_validation_query = f"""
         SELECT *
         FROM `{PROJECT}.{SILVER_DATASET}.silver_INDEXING_TABLE_All_Record_Errors`
     """
+    print(record_validation_query)
     record_validation_table = client.query(record_validation_query).to_dataframe()
     record_validation_table = pd.merge(record_validation_table, record_folders, on=['Record_EntityId'], how='inner')
 
@@ -102,7 +117,7 @@ def main():
         WHERE Type = "File"
         """
     bypass_files = client.query(bypass_file_query).to_dataframe()
-    
+    print(bypass_file_query)
     #VALIDATION BYPASS TABLES
     bypass_record_query = f"""
         SELECT *
@@ -110,12 +125,15 @@ def main():
         WHERE Type = "Record"
         """
     bypass_records = client.query(bypass_record_query).to_dataframe()
-
+    print(bypass_record_query)
 
     print_sub_section("STAGING RELEASE FILES AND RECORDS")
     #---------------------------------------------------------------------------------
+    #Filter on files that pass validation OR are on the bypass list.
     release_staged_files = file_validation_table[(file_validation_table['Validation_Completion'] == '3/3') | (file_validation_table['File_EntityId'].isin(bypass_files['File_EntityId']))]
-    
+
+
+    #Filter on Record rows that pass validation by matching on the following IDs OR are on the bypass list and match the IDs:
     match_cols = [
         'Record_EntityId', 
         'HTAN_PARTICIPANT_ID', 
@@ -135,7 +153,6 @@ def main():
         (merged_table['is_bypass'] == True)
     ].drop(columns=['is_bypass'])
     
-    
     #---------------------------------------------------------------------------------
     print_sub_section("PRODUCING FILTERED COMPONENT-LEVEL-TABLES")
     
@@ -146,7 +163,7 @@ def main():
         if table.table_id.startswith("silver_METADATA_TABLE_All_")]
     
     for table_id in silver_metadata:
-        print("Staging: "  +  table_id)                
+        print("Filtering Table To Stage for Release: "  +  table_id)                
         metadata_type = table_id.split("_")[4]
         component = table_id.split("_")[5]
         
@@ -183,9 +200,7 @@ def main():
                 df
             )
         #---------------------------------------------------------------------------------
-
     print_sub_section("GENERATING SUMMARY LEVEL-TABLES")
-
     #File level validated files - push to BQ
     release_staged_files
     cols_to_drop = [col for col in release_staged_files.columns if any(val_column in col for val_column in validation_columns)]
@@ -198,10 +213,8 @@ def main():
                 "gold_INDEXING_TABLE_All_File_Validation_Passed",
                 release_staged_files
             )
-    
     #---------------------------------------------------------------------------------
     summary_count_files = release_staged_files.groupby(['Component', 'HTAN_Center', 'Status_Folder_Name']).size().reset_index(name='Number_of_Files')
-    
     load_bq(
                 client,
                 PROJECT,
@@ -210,7 +223,6 @@ def main():
                 summary_count_files
             )
     #---------------------------------------------------------------------------------
-
     #Record level validated files - push to BQ
     release_staged_records
     cols_to_drop = [col for col in release_staged_records.columns if any(val_column in col for val_column in validation_columns)]
