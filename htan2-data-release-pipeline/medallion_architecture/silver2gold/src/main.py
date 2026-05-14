@@ -243,7 +243,7 @@ def main():
                 client,
                 PROJECT,
                 GOLD_DATASET,
-                "gold_INDEXING_TABLE_All_File_Validation_Passed_RecordSet_Counts",
+                "gold_INDEXING_TABLE_All_RecordSet_Validation_Passed_Row_Counts",
                 summary_count_records
             )
     #---------------------------------------------------------------------------------
