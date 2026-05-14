@@ -114,8 +114,7 @@ def main():
 
     print_sub_section("STAGING RELEASE FILES AND RECORDS")
     #---------------------------------------------------------------------------------
-    release_staged_files = file_validation_table[(file_validation_table['Validation_Completion'] == '3/3') | 
-                                                        (file_validation_table['File_EntityId'].isin(bypass_files))]
+    release_staged_files = file_validation_table[(file_validation_table['Validation_Completion'] == '3/3') | (file_validation_table['File_EntityId'].isin(bypass_files['File_EntityId']))]
     
     match_cols = [
         'Record_EntityId', 
@@ -201,7 +200,7 @@ def main():
             )
     
     #---------------------------------------------------------------------------------
-    summary_count_files = release_staged_files.groupby(['Component', 'HTAN_Center', 'Status_Folder_Name']).size().reset_index(name='Files_Staged')
+    summary_count_files = release_staged_files.groupby(['Component', 'HTAN_Center', 'Status_Folder_Name']).size().reset_index(name='Number_of_Files')
     
     load_bq(
                 client,
@@ -226,7 +225,7 @@ def main():
             )
     #---------------------------------------------------------------------------------
 
-    summary_count_records = release_staged_records.groupby(['Component', 'HTAN_Center', 'Status_Folder_Name']).size().reset_index(name='Files_Staged')
+    summary_count_records = release_staged_records.groupby(['Component', 'HTAN_Center', 'Status_Folder_Name']).size().reset_index(name='Number_Rows_in_RecordSet')
     
     load_bq(
                 client,
