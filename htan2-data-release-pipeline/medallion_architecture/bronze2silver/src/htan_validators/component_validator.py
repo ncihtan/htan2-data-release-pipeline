@@ -31,6 +31,15 @@ HTAN Validation: Component
         those submitted to the Exclusion List Request Form, and flags any files marked
         for exclusion.
 
+        6. Check the file size of large format files (fastq, ome-tiffs, ect.) and tabular format files.
+        A cutoff has been set for large and tabular format files. 
+        Large files include and must be > 1MB:
+        ["fastq", "bam", "ome-tiff", "tiff", "gzip"]
+        Tabular file formats include and must be >100 Bytes:
+        ["csv", "tsv", "txt"]
+        No file can be 0 bytes.
+        
+
 Author:       Yamina Katariya <ykatariy@systemsbiology.org> 
 Date Created: 04-01-2026
 Date Updated: 05-12-2026
