@@ -29,8 +29,16 @@ following checks on component-specific metadata tables:
     5. **Exclusion List Cross-Referencing:** Compares the files uploaded to Synapse to
     those submitted to the Exclusion List Request Form, and flags any files marked
     for exclusion. 
-"""
 
+    6. **Check the file size of large format files (fastq, ome-tiffs, ect.) and tabular format files.
+        A cutoff has been set for large and tabular format files. 
+        Large files include and must be > 1MB:
+        ["fastq", "bam", "ome-tiff", "tiff", "gzip"]
+        Tabular file formats include and must be >100 Bytes:
+        ["csv", "tsv", "txt"]
+        No file can be 0 bytes.
+ 
+"""
 import re
 import pandas as pd
 import numpy as np
@@ -376,6 +384,56 @@ class HTANComponentValidator(BaseValidator):
             )
 
         return df
+    
+    
+    def check_file_size(self, df):
+        """
+        Verifies that provided filesize in synapse matches cut-offs for corrupted files.
+
+        Args:
+            syn (Synapse instance):
+                Synapse client object.
+
+            df (pandas.DataFrame):
+                Component-level metadata table.
+
+            syn_ids_col (str):
+                Name of column containing Synapse IDs to be validated.
+
+	        syn_filesize (str):
+                Name of column containing file sizes to be validated.
+
+        Returns:
+            df (pandas.DataFrame):
+                Component-level metadata table.
+        """
+        syn_ids_col = "File_EntityId"
+        syn_filesize = "File_Size_Bytes"
+        syn_filetype = "FILE_FORMAT"
+        
+        numeric_sizes = pd.to_numeric(df[syn_filesize], errors="coerce")        
+        formats = df[syn_filetype].astype(str).str.lower().str.strip()
+        
+        #Define the types of files to be checked for sizes.
+        large_formats = ["fastq", "bam", "ome-tiff", "tiff", "gzip"]
+        tabular_formats = ["csv", "tsv", "txt"]
+        
+        mask_large = formats.isin(large_formats) & (numeric_sizes <= 1000000)
+        mask_tabular = formats.isin(tabular_formats) & (numeric_sizes <= 100)
+        mask_zero = numeric_sizes == 0
+        invalid_mask = mask_large | mask_tabular | mask_zero   
+        
+        for idx in df[invalid_mask].index:
+                    self.append_error(
+                        df,
+                        idx,
+                        error_type="SMALL_FILE_SIZE_WARNING",
+                        message=f"{df.at[idx, syn_ids_col]} is {df.at[idx, syn_filesize]} bytes (format: {df.at[idx, syn_filetype]})! This may be a corrupted file. Must be checked before release."
+                    )
+
+        return df
+    
+    
 
     def validate(self, df, syn, client, metadata_type, component, exclusion_list):
         """
@@ -431,5 +489,8 @@ class HTANComponentValidator(BaseValidator):
             # Cross-reference exclusion list (#5)
             if metadata_type == "Files":
                 df = self.check_excluded_files(df, exclusion_list)
+            # Check to see if the file size is suspicious
+            if metadata_type == "Files" and component != "SpatialLevel3":
+                df = self.check_file_size(df)
 
         return df

@@ -23,8 +23,8 @@ Functions:
 
 Author:       Yamina Katariya <ykatariy@systemsbiology.org>
 Date Created: 04-01-2026
-Date Updated: 04-17-2026
-Modified By:  
+Date Updated: 05-12-2026
+Modified By:  Dar'ya Pozhidayeva
 """
 
 from datetime import datetime
@@ -299,7 +299,8 @@ def main():
                         "MISSING_HTAN_ID",
                         "DUPLICATE_HTAN_ID",
                         "INVALID_SYNAPSE_ID",
-                        "EXCLUDED_FILE"]
+                        "EXCLUDED_FILE",
+                        "SMALL_FILE_SIZE_WARNING"]
 
     provenance_errors = ["MISSING_CENTER_RECORD",
                          "MISSING_DEMOGRAPHICS",
@@ -357,6 +358,7 @@ def main():
                 record_error_rows.append({
                     "Component": row['Component'],
                     "Folder_EntityId": row['Folder_EntityId'],
+                    "Record_EntityId": row['Record_EntityId'],
                     "HTAN_Center": row['HTAN_Center'],
                     "HTAN_PARTICIPANT_ID": row.get("HTAN_PARTICIPANT_ID", None),
                     "HTAN_BIOSPECIMEN_ID": row.get("HTAN_BIOSPECIMEN_ID", None),
@@ -459,6 +461,7 @@ def main():
     record_error_table = pd.DataFrame(record_error_rows)
     record_error_table = record_error_table.drop_duplicates(
         subset=['Component',
+                'Record_EntityId',
                 'Folder_EntityId',
                 'HTAN_Center',
                 'HTAN_PARTICIPANT_ID',
