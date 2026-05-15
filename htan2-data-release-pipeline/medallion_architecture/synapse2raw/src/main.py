@@ -616,6 +616,18 @@ def main() -> None:
             MEDALLION_LAYER,
             "raw_INDEXING_TABLE_All_RecordSets_With_Validation_Status",
             records)
+        
+        #EXCEPTION TABLE FOR RELEASE----------------------------------------------------------------------------------------
+        url = "https://docs.google.com/spreadsheets/d/1Gidm_ecocokvPQCw9Laz0ITB9FvIxd-v6-CIjyjtKz0/export?format=csv&gid=0"
+        # Skip the header lines in the doc.
+        bypass_table = pd.read_csv(url, skiprows=5)
+        #Load to BQ
+        load_bq(
+            client,
+            HTAN_BQ_PROJECT,
+            MEDALLION_LAYER,
+            "raw_INDEXING_TABLE_All_Bypass_Validation_Table",
+            bypass_table)
 
 if __name__ == "__main__":
     main()
