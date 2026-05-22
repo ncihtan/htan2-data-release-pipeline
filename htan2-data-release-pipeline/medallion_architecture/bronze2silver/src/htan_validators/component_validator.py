@@ -204,7 +204,8 @@ class HTANComponentValidator(BaseValidator):
             required_ids = ["HTAN_BIOSPECIMEN_ID"]
         elif metadata_type == "Records" and component not in ["Biospecimen", "ChannelMetadata", "SpatialPanel"]:
             required_ids = ["HTAN_PARTICIPANT_ID"]
-
+        
+        
         for col in required_ids:
 
             # Standardize nulls from BQ
@@ -220,15 +221,19 @@ class HTANComponentValidator(BaseValidator):
                     message=f"{col} is null."
                 )
 
-            # Check for duplicate values
-            dup_mask = df[col].duplicated(keep=False) & df[col].notna()
-            for idx in df[dup_mask].index:
-                self.append_error(
-                    df,
-                    idx,
-                    error_type="DUPLICATE_HTAN_ID",
-                    message=f"{col} is duplicated."
-                )
+            #Allow the Molecular_Test Assay to have duplicated HTAN_Participant_IDs (Participants have multiple mutations/results as rows.)
+            if col == 'HTAN_PARTICIPANT_ID' and component == 'MolecularTest':
+                continue
+            else:
+                # Check for duplicate values
+                dup_mask = df[col].duplicated(keep=False) & df[col].notna()
+                for idx in df[dup_mask].index:
+                    self.append_error(
+                        df,
+                        idx,
+                        error_type="DUPLICATE_HTAN_ID",
+                        message=f"{col} is duplicated."
+                    )
 
         return df
 
