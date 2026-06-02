@@ -299,7 +299,7 @@ def main() -> None:
                 df
             )
 
-    #Process records next in a similar manner using the API commands for Record sets----------------
+    #Process records next in a similar manner using the API commands for Record sets
     component_dfs_records = defaultdict(list)
 
     for _, row in all_record_annotations.iterrows():
@@ -365,7 +365,8 @@ def main() -> None:
     stacked_by_component_records = {
         component: pd.concat(dfs, ignore_index=True)
         for component, dfs in component_dfs_records.items()}
-
+    
+    #Log BQ hash values for records before pushing tables
     for component, df in stacked_by_component_records.items():
         component_safe = component.replace("-", "_").replace(" ", "_")
         table_name = f"bronze_METADATA_TABLE_All_Records_{component_safe}"
