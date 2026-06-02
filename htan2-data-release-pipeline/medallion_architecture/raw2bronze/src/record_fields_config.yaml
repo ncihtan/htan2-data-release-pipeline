@@ -1,0 +1,80 @@
+fields_by_component:
+  Biospecimen:
+    - HTAN_BIOSPECIMEN_ID
+    - Record_EntityId
+    - HTAN_Center
+    - HTAN_PARENT_ID
+    - Component
+
+  Demographics:
+    - HTAN_PARTICIPANT_ID
+    - Record_EntityId
+    - HTAN_Center
+    - Component
+
+  Diagnosis:
+    - HTAN_PARTICIPANT_ID
+    - TISSUE_OR_ORGAN_OF_ORIGIN_UBERON_CODE
+    - Record_EntityId
+    - HTAN_Center
+    - Component
+
+  Exposure:
+    - HTAN_PARTICIPANT_ID
+    - ENVIRONMENTAL_EXPOSURE
+    - Record_EntityId
+    - HTAN_Center
+    - Component
+
+  FamilyHistory:
+    - HTAN_PARTICIPANT_ID
+    - FAMILY_MEMBER_CANCER_HISTORY
+    - Record_EntityId
+    - HTAN_Center
+    - Component
+
+  FollowUp:
+    - HTAN_PARTICIPANT_ID
+    - DISEASE_RESPONSE
+    - Record_EntityId
+    - HTAN_Center
+    - Component
+
+  MolecularTest:
+    - HTAN_PARTICIPANT_ID
+    - GENE_SYMBOL
+    - MOLECULAR_ANALYSIS_METHOD
+    - Record_EntityId
+    - HTAN_Center
+    - Component
+
+  ChannelMetadata:
+    - HTAN_PANEL_ID
+    - CHANNEL_NAME
+    - CHANNEL_ID
+    - Record_EntityId
+    - HTAN_Center
+    - Component
+
+  SpatialPanel:
+    - HTAN_PANEL_ID
+    - TARGET_NAME
+    - TARGET_TYPE
+    - Record_EntityId
+    - HTAN_Center
+    - Component
+
+  Therapy:
+    - HTAN_PARTICIPANT_ID
+    - TREATMENT_TYPE
+    - INITIAL_DISEASE_STATUS
+    - Record_EntityId
+    - HTAN_Center
+    - Component
+
+  VitalStatus:
+    - HTAN_PARTICIPANT_ID
+    - VITAL_STATUS
+    - Record_EntityId
+    - HTAN_Center
+    - Component
