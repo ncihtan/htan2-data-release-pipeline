@@ -10,7 +10,7 @@ Requires (env):
 - BQ_DATASET (defaults to 'htan2_synapse_bronze')
 
 Authors: Dar'ya Pozhidayeva
-Updated: 2026-03-31
+Updated: 06-02-2026
 """
 
 import pandas as pd
@@ -21,6 +21,8 @@ from collections import defaultdict
 from datetime import datetime
 from synapseclient.models import RecordSet
 import tempfile
+import yaml
+from google.cloud import bigquery
 
 import os
 import logging
@@ -29,7 +31,6 @@ from client_load import (
     init_bq_client,
     init_synapse_client,
 )
-
 # --------------------------------------------------------------------------------------
 # Settings (env-overridable)
 HTAN_BQ_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT", "htan2-dcc")
@@ -41,7 +42,7 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 log = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------------------
-# Helpers
+# Helper Functions
 def mint_bq_hash(
     htan_id: str,
     synapse_id: str,
@@ -64,13 +65,42 @@ def mint_bq_hash(
     token = base64.urlsafe_b64encode(digest).decode("utf-8").rstrip("=")
     return token[:length]
 
+def mint_record_id(
+    row: pd.Series,
+    component: str,
+    payload_fields_by_component: dict,
+    namespace: str = "HTAN",
+    version: str = "v1",
+    length: int = 16,
+) -> str | None:
+    payload_fields = payload_fields_by_component.get(component)
+    if payload_fields is None:
+        raise ValueError(f"No necessary fields defined for component: '{component}'")
+    cleaned = []
+    for field in payload_fields:
+        val = row.get(field)
+        if val is None:
+            return None
+        val = str(val).strip()
+        if val == "" or val.lower() == "nan":
+            return None
+        cleaned.append(val)
+    id_segment = "|".join(cleaned)
+    payload = f"{namespace}|{version}|{id_segment}".encode("utf-8")
+    digest = hashlib.sha256(payload).digest()
+    token = base64.urlsafe_b64encode(digest).decode("utf-8").rstrip("=")
+    return token[:length]
+
+# --------------------------------------------------------------------------------------
+#MAIN
 def main() -> None:
     # Instantiate clients
     syn = init_synapse_client()
     client = init_bq_client()
 
+    #SET UP HASH REGISTRIES
+    #FILE REGISTRY
     registry_table = "bronze_INDEXING_TABLE_BQ_Hash_File_ID_Registry"
-    #Check if hash table exists-----------------------------
     try:
         registry_df = client.query(f"""
             SELECT BQ_Hash_ID, HTAN_DATA_FILE_ID, Synapse_EntityId
@@ -82,6 +112,47 @@ def main() -> None:
         registry_df = pd.DataFrame(columns=[
             "BQ_Hash_ID", "HTAN_DATA_FILE_ID", "Synapse_EntityId", "First_Seen", "Source_Component"
         ])
+
+    #RECORD REGISTRY
+    #Fetch config used for record hashes
+    with open("record_fields_config.yaml", "r") as f:
+        config = yaml.safe_load(f)
+    
+    PAYLOAD_FIELDS_BY_COMPONENT = config["fields_by_component"]
+    record_registry_table = "bronze_INDEXING_TABLE_BQ_Hash_Record_ID_Registry"
+    #Fetch all the unique columns from the config
+    all_payload_fields = list(dict.fromkeys(
+        field
+        for fields in PAYLOAD_FIELDS_BY_COMPONENT.values()
+        for field in fields
+    ))
+    #Set the columns
+    registry_columns = [
+        "BQ_Hash_Record_ID",
+        *all_payload_fields,
+        "First_Seen",
+        "Source_Component",
+    ]
+    
+    full_registry_schema = [
+        bigquery.SchemaField(col, "STRING", mode="NULLABLE")
+        for col in registry_columns
+    ]
+    table_ref = f"{HTAN_BQ_PROJECT}.{MEDALLION_LAYER}.{record_registry_table}"
+    
+    try:
+        client.get_table(table_ref)
+        print("Registry table found")
+    except Exception:
+        print("Registry not found — initializing new registry")
+        bq_table = bigquery.Table(table_ref, schema=full_registry_schema)
+        client.create_table(bq_table)
+    
+    record_registry_df = client.query(f"""
+        SELECT *
+        FROM `{HTAN_BQ_PROJECT}.{MEDALLION_LAYER}.{record_registry_table}`
+    """).to_dataframe()
+    print(f"Loaded {len(record_registry_df)} existing IDs")
 
     #Load up source tables-----------------------------
     all_file_annotations = client.query("""
@@ -298,11 +369,50 @@ def main() -> None:
     for component, df in stacked_by_component_records.items():
         component_safe = component.replace("-", "_").replace(" ", "_")
         table_name = f"bronze_METADATA_TABLE_All_Records_{component_safe}"
-        
-        #Column rename and cleanup 
+        payload_fields = PAYLOAD_FIELDS_BY_COMPONENT[component]
+        merge_cols = [c for c in payload_fields if c in df.columns and c in record_registry_df.columns]
+    
+        registry_for_merge = record_registry_df.drop_duplicates(subset=merge_cols) if merge_cols else record_registry_df
+    
+        df = df.merge(registry_for_merge[merge_cols + ["BQ_Hash_Record_ID"]], how="left", on=merge_cols)
+        needs_id = df["BQ_Hash_Record_ID"].isna()
+    
+        df.loc[needs_id, "BQ_Hash_Record_ID"] = df.loc[needs_id].apply(
+            lambda row: mint_record_id(
+                row=row,
+                component=component,
+                payload_fields_by_component=PAYLOAD_FIELDS_BY_COMPONENT,
+            ),
+            axis=1,
+        )
+    
+        registry_payload_cols = [
+            c for c in payload_fields
+            if c in df.columns and c not in ("Record_EntityId", "BQ_Hash_Record_ID")
+        ]
+    
+        new_registry_rows = df.loc[needs_id, [
+            "BQ_Hash_Record_ID",
+            "Record_EntityId",
+            *registry_payload_cols,
+        ]].drop_duplicates(subset=["BQ_Hash_Record_ID"]).replace('nan', np.nan).dropna(subset=['BQ_Hash_Record_ID'])
+    
+        if not new_registry_rows.empty:
+            new_registry_rows["First_Seen"] = datetime.utcnow()
+            new_registry_rows["Source_Component"] = component
+            load_bq(
+                client,
+                HTAN_BQ_PROJECT,
+                MEDALLION_LAYER,
+                record_registry_table,
+                new_registry_rows,
+                write_mode="append"
+            )
+            record_registry_df = pd.concat([record_registry_df, new_registry_rows], ignore_index=True)
+    
         df = df.rename(columns=rename_map)
         df = df.drop(columns=['row_index'])
-
+        
         load_bq(
             client,
             HTAN_BQ_PROJECT,
