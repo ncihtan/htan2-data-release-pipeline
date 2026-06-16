@@ -10,7 +10,7 @@ Requires (env):
 - BQ_DATASET (defaults to 'htan2_synapse_bronze')
 
 Authors: Dar'ya Pozhidayeva
-Updated: 06-02-2026
+Updated: 06-16-2026
 """
 
 import pandas as pd
@@ -35,12 +35,10 @@ from client_load import (
 # Settings (env-overridable)
 HTAN_BQ_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT", "htan2-dcc")
 MEDALLION_LAYER = os.getenv("BQ_DATASET", "htan2_medallion_bronze")
-
 # --------------------------------------------------------------------------------------
 #Set Logging
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 log = logging.getLogger(__name__)
-
 # --------------------------------------------------------------------------------------
 # Helper Functions
 def mint_bq_hash(
@@ -66,31 +64,48 @@ def mint_bq_hash(
     return token[:length]
 
 def mint_record_id(
-    row: pd.Series,
+    row: pd.Series | dict,
     component: str,
     payload_fields_by_component: dict,
     namespace: str = "HTAN",
     version: str = "v1",
     length: int = 16,
 ) -> str | None:
-    payload_fields = payload_fields_by_component.get(component)
-    if payload_fields is None:
-        raise ValueError(f"No necessary fields defined for component: '{component}'")
-    cleaned = []
-    for field in payload_fields:
-        val = row.get(field)
-        if val is None:
+    
+    if component in ("SpatialPanel", "ChannelMetadata"):
+        # Use row_index to generate the hash if spatial or channel metadata.
+        row_idx = row.get("row_index")
+        
+        if row_idx is None or pd.isna(row_idx):
             return None
-        val = str(val).strip()
-        if val == "" or val.lower() == "nan":
-            return None
-        cleaned.append(val)
-    id_segment = "|".join(cleaned)
+            
+        id_segment = str(row_idx).strip()
+        
+    else:
+        #Use regular payloads for the rest
+        payload_fields = payload_fields_by_component.get(component)
+        
+        if payload_fields is None:
+            raise ValueError(f"No necessary fields defined for component: '{component}'")
+            
+        cleaned = []
+        for field in payload_fields:
+            val = row.get(field)
+            if val is None:
+                return None
+            val = str(val).strip()
+            
+            if val == "" or val.lower() == "nan":
+                return None
+                
+            cleaned.append(val)
+            
+        id_segment = "|".join(cleaned)
+        
     payload = f"{namespace}|{version}|{id_segment}".encode("utf-8")
     digest = hashlib.sha256(payload).digest()
     token = base64.urlsafe_b64encode(digest).decode("utf-8").rstrip("=")
     return token[:length]
-
 # --------------------------------------------------------------------------------------
 #MAIN
 def main() -> None:
@@ -174,7 +189,7 @@ def main() -> None:
     
     subset_record_validations = all_record_annotations[["HTAN_Center", "Folder_EntityId", "Record_EntityId", "Folder_Source_Path", "Status_Folder_Name", "Component", "Modified_On", "Version_Label", "Bound_Schema_Name", "Schema_Version"]]
 
-#File Metadata Processing
+    #File Metadata Processing
     component_dfs = defaultdict(list)
 
     for _, row in all_file_annotations.iterrows():
@@ -188,6 +203,7 @@ def main() -> None:
             df = syn.tableQuery(f"SELECT * FROM {annotation_view_id}").asDataFrame()
             df["HTAN_Center"] = row["HTAN_Center"]
             df["Folder_EntityId"] = row["Folder_EntityId"]
+            df["Status_Folder_Name"] = row["Status_Folder_Name"]
             df["Component"] = component
             component_dfs[component].append(df)
         except Exception as e:
@@ -303,27 +319,46 @@ def main() -> None:
     component_dfs_records = defaultdict(list)
 
     for _, row in all_record_annotations.iterrows():
-        record_view_id = row.get("Record_EntityId")
-        if pd.isna(record_view_id):
-            continue
+        record_view_id_raw = row.get("Record_EntityId")
         component = row.get("Component")
-        rs_meta = syn.get(record_view_id, downloadFile=False)
-        validation_fh_id = getattr(rs_meta, "validationFileHandleId", None)
+        
+        if pd.isna(record_view_id_raw) or record_view_id_raw is None or str(record_view_id_raw).strip() == "None":
+            continue
+            
+        record_view_id_raw = str(record_view_id_raw).strip()
+        if "." in record_view_id_raw:
+            record_view_id, version_str = record_view_id_raw.split(".", 1)
+            version = int(version_str)
+        else:
+            record_view_id = record_view_id_raw
+            version = None
         
         try:
-            #Download the RecordSet CSV itself
-            with tempfile.TemporaryDirectory() as tmpdir:
-                rs = RecordSet(id=record_view_id, path=tmpdir).get()
-                data_df = pd.read_csv(rs.path).reset_index(drop=True)
-                #If all columns are NULL in the table; drop row.
-                data_df = data_df.dropna(how="all")
-            
-            #Get RecordSet metadata and validation file handle
-            rs_meta = syn.get(record_view_id, downloadFile=False)
+            #Extract RecordSet metadata
+            rs_meta = syn.get(record_view_id, version=version, downloadFile=False)
+            file_handle_id = rs_meta.dataFileHandleId
             validation_fh_id = getattr(rs_meta, "validationFileHandleId", None)
             
+            #Download the recordset
+            download_info = syn._getFileHandleDownload(
+                fileHandleId=file_handle_id,
+                objectId=record_view_id,
+                objectType="FileEntity"
+            )
+            
+            download_url = download_info.get("preSignedURL")
+            
+            if not download_url:
+                raise ValueError("Could not retrieve a valid records data download URL from Synapse.")
+                
+            #Load recordset
+            data_df = pd.read_csv(download_url).reset_index(drop=True)
+            #If all columns are NULL in the table; drop row.
+            data_df = data_df.dropna(how="all")
+            
+            #Get validation metrics
             if not validation_fh_id:
-                print(f"RecordSet {record_view_id} has no validationFileHandleId")
+                print(f"RecordSet {record_view_id_raw} has no validationFileHandleId")
                 validation_df = pd.DataFrame(index=data_df.index)
                 validation_df['is_valid'] = 'False'
                 validation_df['validation_error_message'] = 'Files were not validated using the Curator'
@@ -331,11 +366,12 @@ def main() -> None:
                 validation_df = validation_df.reset_index().rename(columns={"index": "row_index"})
 
             else:
-            #Download the validation CSV
+                # Download the validation CSV
                 validation_info = syn._getFileHandleDownload(
                     fileHandleId=validation_fh_id,
                     objectId=record_view_id,
-                    objectType="FileEntity")
+                    objectType="FileEntity"
+                )
                 
                 #Pull out the local file path
                 validation_path = validation_info['preSignedURL']
@@ -344,33 +380,39 @@ def main() -> None:
                     raise ValueError(f"Could not determine validation file path from: {validation_info}")
                 validation_df = pd.read_csv(validation_path)
             
-            # 5) Join by row number
+            #Join data and validation logs by row number
             data_df = data_df.reset_index().rename(columns={"index": "row_index"})
             merged_df = data_df.merge(validation_df, on="row_index", how="left")
             
-            merged_df = merged_df.rename(columns={'is_valid': 'Validation_Passed', 
-                                            'validation_error_message': 'Validation_Error_Message',
-                                            'all_validation_messages': 'All_Validation_Messages'
-                                            })
+            merged_df = merged_df.rename(columns={
+                'is_valid': 'Validation_Passed', 
+                'validation_error_message': 'Validation_Error_Message',
+                'all_validation_messages': 'All_Validation_Messages'
+            })
 
             merged_df["HTAN_Center"] = row["HTAN_Center"]
             merged_df["Folder_EntityId"] = row["Folder_EntityId"]
             merged_df["Component"] = component
-            merged_df["Record_EntityId"] = record_view_id
+            merged_df["Record_EntityId"] = record_view_id_raw
+            merged_df["Status_Folder_Name"] = row['Status_Folder_Name']
             component_dfs_records[component].append(merged_df)
             
         except Exception as e:
-            print(f"Failed downloading {record_view_id}: {e}")
+            print(f"Failed downloading {record_view_id_raw}: {e}")
 
     stacked_by_component_records = {
         component: pd.concat(dfs, ignore_index=True)
-        for component, dfs in component_dfs_records.items()}
+        for component, dfs in component_dfs_records.items()
+    }
     
     #Log BQ hash values for records before pushing tables
     for component, df in stacked_by_component_records.items():
         component_safe = component.replace("-", "_").replace(" ", "_")
+        
         table_name = f"bronze_METADATA_TABLE_All_Records_{component_safe}"
+        
         payload_fields = PAYLOAD_FIELDS_BY_COMPONENT[component]
+        
         merge_cols = [c for c in payload_fields if c in df.columns and c in record_registry_df.columns]
     
         registry_for_merge = record_registry_df.drop_duplicates(subset=merge_cols) if merge_cols else record_registry_df
@@ -379,13 +421,15 @@ def main() -> None:
         needs_id = df["BQ_Hash_Record_ID"].isna()
     
         df.loc[needs_id, "BQ_Hash_Record_ID"] = df.loc[needs_id].apply(
-            lambda row: mint_record_id(
-                row=row,
-                component=component,
-                payload_fields_by_component=PAYLOAD_FIELDS_BY_COMPONENT,
-            ),
-            axis=1,
-        )
+                    lambda row: mint_record_id(
+                        row={**row.to_dict(), "Record_EntityId": str(row["Record_EntityId"]).split('.')[0]}
+                            if "Record_EntityId" in row and pd.notna(row["Record_EntityId"]) 
+                            else row,
+                        component=component,
+                        payload_fields_by_component=PAYLOAD_FIELDS_BY_COMPONENT,
+                    ),
+                    axis=1,
+                )
     
         registry_payload_cols = [
             c for c in payload_fields
@@ -401,6 +445,7 @@ def main() -> None:
         if not new_registry_rows.empty:
             new_registry_rows["First_Seen"] = datetime.utcnow()
             new_registry_rows["Source_Component"] = component
+            new_registry_rows = new_registry_rows.drop(columns=["Component"], errors="ignore")
             load_bq(
                 client,
                 HTAN_BQ_PROJECT,
@@ -412,7 +457,7 @@ def main() -> None:
             record_registry_df = pd.concat([record_registry_df, new_registry_rows], ignore_index=True)
     
         df = df.rename(columns=rename_map)
-        df = df.drop(columns=['row_index'])
+        df = df.drop(columns=['row_index'], errors='ignore')
         
         load_bq(
             client,
@@ -421,6 +466,7 @@ def main() -> None:
             table_name,
             df
         )
+
         
     #Migrate version of raw table to bronze for silver indexing
     load_bq(
