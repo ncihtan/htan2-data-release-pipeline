@@ -15,7 +15,7 @@ Requires (env):
   - SCHEMA_BINDING_CONFIG_URL (defaults to htan2_project_setup raw URL)
 
 Authors: Dar'ya Pozhidayeva
-Updated: 2025-03-24
+Updated: 2026-06-16
 """
 
 from __future__ import annotations
@@ -94,12 +94,12 @@ def data_frames_from_config(binding_dictionary: Dict[str, Any]) -> pd.DataFrame:
         projects = value.get("projects", [])
         for project in projects:
             project_rows.append(
-                {
-                    "HTAN_Center": project.get("name"),
-                    "Folder_EntityId": project.get("synapse_id"),
-                    "Annotation_EntityId": project.get("fileview_id"),
-                    "Folder_Source_Path": project.get("subfolder"),
-                }
+            {
+                "HTAN_Center": project.get("name"),
+                "Folder_EntityId": project.get("synapse_id"),
+                "Annotation_EntityId": project.get("fileview_id"),
+                "Folder_Source_Path": project.get("subfolder"),
+            }
             )
     return pd.DataFrame(project_rows)
 
@@ -302,7 +302,7 @@ def main() -> None:
     if all_centers.empty or "name" not in all_centers.columns:
         raise RuntimeError("Synapse /projects returned no results or missing expected fields.")
 
-    phase2_centers = all_centers[safe_contains(all_centers["name"], r"(HTAN2_|htan2-testing1)")]
+    phase2_centers = all_centers[safe_contains(all_centers["name"], r"(HTAN2_)")]
     phase2_centers = phase2_centers[~safe_contains(phase2_centers["name"], r"(HTAN2_BQDEVPROJECT)")].copy()
 
     phase2_centers = phase2_centers.rename(
@@ -535,7 +535,7 @@ def main() -> None:
 
     file_schema_bindings = (config.get("schema_bindings", {}) or {}).get("file_based", {}) or {}
     record_schema_bindings = (config.get("schema_bindings", {}) or {}).get("record_based", {}) or {}
-
+    
     #Load record sets and validation information-------------------------------------------------------------------
     files = data_frames_from_config(file_schema_bindings)
     if not files.empty:
@@ -556,6 +556,8 @@ def main() -> None:
 
     #Load record sets and validation information----------------------------------------------------------------------------------------
     records = data_frames_from_config(record_schema_bindings)
+    
+    
     if not records.empty:
         records = records[records["HTAN_Center"].isin(phase2_centers["HTAN_Center"])].copy()
         split_cols = records["Folder_Source_Path"].fillna("").astype(str).str.split("/", expand=True)
@@ -564,6 +566,7 @@ def main() -> None:
         records[["Status_Folder_Name", "SubFolder_Layer1", "SubFolder_Layer2"]] = split_cols.iloc[:, :3]
         records = records.merge(Component, on="Folder_EntityId", how="left")
         records.rename(columns={"Annotation_EntityId": "Record_EntityId"}, inplace=True)
+
         
         #Load BQ Table----------------------------------------------------------------------------------------
         load_bq(
