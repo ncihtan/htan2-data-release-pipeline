@@ -15,7 +15,7 @@ Requires (env):
   - SCHEMA_BINDING_CONFIG_URL (defaults to htan2_project_setup raw URL)
 
 Authors: Dar'ya Pozhidayeva
-Updated: 2026-06-16
+Updated: 2026-06-17
 """
 
 from __future__ import annotations
@@ -545,18 +545,19 @@ def main() -> None:
             split_cols[split_cols.shape[1]] = None
         files[["Status_Folder_Name", "SubFolder_Layer1", "SubFolder_Layer2", "SubFolder_Layer3"]] = split_cols.iloc[:, :4]
         files = files.merge(Component, on="Folder_EntityId", how="left")
-
-    #Load BQ Table----------------------------------------------------------------------------------------
-    load_bq(
-        client,
-        HTAN_BQ_PROJECT,
-        MEDALLION_LAYER,
-        "raw_INDEXING_TABLE_All_Files_Annotation_Fileview_Source",
-        files)
+        #Remove testing folders
+        files = files[files['HTAN_Center'] != 'htan2-testing1']
+    
+        #Load BQ Table----------------------------------------------------------------------------------------
+        load_bq(
+            client,
+            HTAN_BQ_PROJECT,
+            MEDALLION_LAYER,
+            "raw_INDEXING_TABLE_All_Files_Annotation_Fileview_Source",
+            files)
 
     #Load record sets and validation information----------------------------------------------------------------------------------------
     records = data_frames_from_config(record_schema_bindings)
-    
     
     if not records.empty:
         records = records[records["HTAN_Center"].isin(phase2_centers["HTAN_Center"])].copy()
@@ -566,8 +567,9 @@ def main() -> None:
         records[["Status_Folder_Name", "SubFolder_Layer1", "SubFolder_Layer2"]] = split_cols.iloc[:, :3]
         records = records.merge(Component, on="Folder_EntityId", how="left")
         records.rename(columns={"Annotation_EntityId": "Record_EntityId"}, inplace=True)
-
-        
+        #Remove testing folders
+        records = records[records['HTAN_Center'] != 'htan2-testing1']
+   
         #Load BQ Table----------------------------------------------------------------------------------------
         load_bq(
             client,
