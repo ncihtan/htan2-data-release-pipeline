@@ -163,7 +163,7 @@ def main() -> None:
         cols = list(all_tables[all_tables['table_name'] == tn]['column_name'])
     
         common_cols = ['HTAN_DATA_FILE_ID', 'File_Name', 'File_EntityId', 
-            'Component', 'HTAN_Center', "BQ_Hash_ID"]
+            'Component', 'HTAN_Center', "BQ_Hash_ID", "Status_Folder_Name"]
     
         # Add 'HTAN_PARENT_ID' if present in cols
         if 'HTAN_PARENT_ID' in cols:
@@ -175,26 +175,26 @@ def main() -> None:
         df = client.query("""
             SELECT %s FROM `%s.%s.%s`
             """ % (qco,t.project,t.dataset_id,t.table_id)).result().to_dataframe()
-    
+
         f = pd.concat([f, df], ignore_index=True)
-    
-    
+
+
     # expand comma and semicolon separated parent lists into individual rows
     f["HTAN_PARENT_ID"] = f["HTAN_PARENT_ID"].apply(
         lambda x: ast.literal_eval(x) if pd.notna(x) else [])
-    
+
     f = f.explode("HTAN_PARENT_ID")
-    
+
     f = f.assign(HTAN_PARENT_ID = \
         f.HTAN_PARENT_ID.str.split("[,;]")).explode('HTAN_PARENT_ID')
-    
+
     # trim whitespace
     f = f.applymap(lambda x: x.strip() if isinstance(x, str) else x).drop_duplicates()
-    
+
     print('')
     print(' Walking parent file ancestry ')
     print('')
-    
+
     parent_map = (
         f[["HTAN_DATA_FILE_ID", "HTAN_PARENT_ID"]]
         .dropna(subset=["HTAN_DATA_FILE_ID", "HTAN_PARENT_ID"])
@@ -202,22 +202,22 @@ def main() -> None:
         .groupby("HTAN_DATA_FILE_ID")["HTAN_PARENT_ID"]
         .apply(list)
         .to_dict())
-    
-    
+
+
     # build all paths for each row
     f["Provenance_Paths"] = f["HTAN_PARENT_ID"].apply(
         lambda x: walk_all_Provenance_Paths(x, parent_map=parent_map, max_depth=10))
-    
+
     # explode so each row is one provenance path
     f_paths = f.explode("Provenance_Paths").copy()
-    
+
     # store string version
     f_paths["Full_Provenance_Chain"] = f_paths["Provenance_Paths"].apply(
         lambda x: " -> ".join(map(str, x)) if isinstance(x, list) else pd.NA)
-    
+
     f_paths["Depth_Prov_Chain"] = f_paths["Provenance_Paths"].apply(
         lambda x: len(x) if isinstance(x, list) else pd.NA)
-    
+
     # first biospecimen found in a path
     f_paths["HTAN_ASSAYED_BIOSPECIMEN_ID"] = f_paths["Provenance_Paths"].apply(
         lambda path: next((i for i in reversed(path) if is_biospecimen_id(i)), pd.NA))
