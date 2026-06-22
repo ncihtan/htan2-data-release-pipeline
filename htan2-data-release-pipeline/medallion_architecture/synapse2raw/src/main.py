@@ -499,7 +499,9 @@ def main() -> None:
         Component = schema_status_df[["Folder_EntityId", "Component"]].drop_duplicates()
     else:
         Component = pd.DataFrame(columns=["Folder_EntityId", "Component"])
-
+    
+    #Remove testing data from all folders even without bound schemas
+    schema_status_df = schema_status_df[schema_status_df['HTAN_Center'] != 'htan2-testing1']
     #Load BQ Table----------------------------------------------------------------------------------------
     load_bq(
         client,
