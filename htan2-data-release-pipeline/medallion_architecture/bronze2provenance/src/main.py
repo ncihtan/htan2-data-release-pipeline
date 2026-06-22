@@ -189,7 +189,7 @@ def main() -> None:
         f.HTAN_PARENT_ID.str.split("[,;]")).explode('HTAN_PARENT_ID')
 
     # trim whitespace
-    f = f.applymap(lambda x: x.strip() if isinstance(x, str) else x).drop_duplicates()
+    f = f.map(lambda x: x.strip() if isinstance(x, str) else x).drop_duplicates()
 
     print('')
     print(' Walking parent file ancestry ')
