@@ -204,8 +204,7 @@ class HTANComponentValidator(BaseValidator):
             required_ids = ["HTAN_BIOSPECIMEN_ID"]
         elif metadata_type == "Records" and component not in ["Biospecimen", "ChannelMetadata", "SpatialPanel"]:
             required_ids = ["HTAN_PARTICIPANT_ID"]
-        
-        
+
         for col in required_ids:
 
             # Standardize nulls from BQ
@@ -389,8 +388,7 @@ class HTANComponentValidator(BaseValidator):
             )
 
         return df
-    
-    
+
     def check_file_size(self, df):
         """
         Verifies that provided filesize in synapse matches cut-offs for corrupted files.
@@ -415,30 +413,28 @@ class HTANComponentValidator(BaseValidator):
         syn_ids_col = "File_EntityId"
         syn_filesize = "File_Size_Bytes"
         syn_filetype = "FILE_FORMAT"
-        
+
         numeric_sizes = pd.to_numeric(df[syn_filesize], errors="coerce")        
         formats = df[syn_filetype].astype(str).str.lower().str.strip()
-        
+
         #Define the types of files to be checked for sizes.
         large_formats = ["fastq", "bam", "ome-tiff", "tiff", "gzip"]
         tabular_formats = ["csv", "tsv", "txt"]
-        
+
         mask_large = formats.isin(large_formats) & (numeric_sizes <= 1000000)
         mask_tabular = formats.isin(tabular_formats) & (numeric_sizes <= 100)
         mask_zero = numeric_sizes == 0
-        invalid_mask = mask_large | mask_tabular | mask_zero   
-        
+        invalid_mask = mask_large | mask_tabular | mask_zero
+
         for idx in df[invalid_mask].index:
-                    self.append_error(
-                        df,
-                        idx,
-                        error_type="SMALL_FILE_SIZE_WARNING",
-                        message=f"{df.at[idx, syn_ids_col]} is {df.at[idx, syn_filesize]} bytes (format: {df.at[idx, syn_filetype]})! This may be a corrupted file. Must be checked before release."
-                    )
+            self.append_error(
+                df,
+                idx,
+                error_type="SMALL_FILE_SIZE_WARNING",
+                message=f"{df.at[idx, syn_ids_col]} is {df.at[idx, syn_filesize]} bytes (format: {df.at[idx, syn_filetype]})! This may be a corrupted file. Must be checked before release."
+            )
 
         return df
-    
-    
 
     def validate(self, df, syn, client, metadata_type, component, exclusion_list):
         """

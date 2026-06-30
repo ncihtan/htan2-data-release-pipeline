@@ -252,6 +252,17 @@ class HTANProvenanceValidator(BaseValidator):
             table_id
         )
 
+        if queried_df.empty:
+            for idx in df.index:
+                self.append_error(
+                    df,
+                    idx,
+                    error_type="UNUSED_PANEL",
+                    message="No files have been submitted for this Panel."
+                )
+            return df
+
+
         # Check if HTAN_PANEL_ID is null for File metadata
         if metadata_type == "Files":
             null_mask = df["HTAN_PANEL_ID"].isna()

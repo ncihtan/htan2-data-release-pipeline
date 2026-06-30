@@ -153,7 +153,7 @@ class BaseValidator:
         df.at[idx, "Release_Error_Messages"].append(error_entry)
 
         return df
-    
+
     def query_bigquery_table(self, client, project_id, dataset_id, table_id, attrs="*"):
         """
         Get an entire table from BigQuery as a Pandas DataFrame.
@@ -175,9 +175,21 @@ class BaseValidator:
             (pandas.DataFrame):
                 The BigQuery table as a dataframe.
         """
+        # Get most recent ingest folder
+        folder_query = """
+            SELECT Status_Folder_Name
+            FROM `htan2-dcc.htan2_synapse_raw.raw_INDEXING_TABLE_All_Folders_With_Bound_Schemas`
+            WHERE Status_Folder_Name LIKE '%ingest%'
+            ORDER BY CAST(REGEXP_EXTRACT(Status_Folder_Name, r'v(\\d+)_ingest') AS INT64) DESC
+            LIMIT 1
+        """
+        latest_folder = client.query(folder_query).to_dataframe().iloc[0]["Status_Folder_Name"]
+
+        # Query table filtering only for the most recent ingest objects
         query = f"""
             SELECT {attrs}
             FROM `{project_id}.{dataset_id}.{table_id}`
+            WHERE Status_Folder_Name = '{latest_folder}'
         """
         return client.query(query).to_dataframe()
 
@@ -195,14 +207,11 @@ class BaseValidator:
                 The loaded data model.
         """
         schema_ver = schema_ver.replace(".", "_")
-        model = self.query_bigquery_table(
-            client,
-            'htan2-dcc',
-            'htan2_data_model_cache',
-            f"HTAN2_Data_Model_v{schema_ver}"
-        )
-
-        return model
+        query = f"""
+            SELECT *
+            FROM `htan2-dcc.htan2_data_model_cache.HTAN2_Data_Model_v{schema_ver}`
+        """
+        return client.query(query).to_dataframe()
 
     def validate(self, *args, **kwargs):
         """

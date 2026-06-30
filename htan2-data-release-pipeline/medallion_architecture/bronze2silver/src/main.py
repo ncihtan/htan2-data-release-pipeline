@@ -26,8 +26,8 @@ Date Created: 04-01-2026
 Date Updated: 05-12-2026
 Modified By:  Dar'ya Pozhidayeva
 """
-
 from datetime import datetime
+import re
 import pandas as pd
 from htan_validators.component_validator import HTANComponentValidator
 from htan_validators.provenance_validator import HTANProvenanceValidator
@@ -50,7 +50,7 @@ SILVER_DATASET = "htan2_medallion_silver"
 #                 HELPER FUNCTIONS
 #####################################################
 
-def query_bigquery_table(client, project_id, dataset_id, table_id):
+def query_bigquery_table(client, project_id, dataset_id, rel_folder, table_id):
     """
     Get an entire table from BigQuery as a Pandas DataFrame.
 
@@ -58,6 +58,7 @@ def query_bigquery_table(client, project_id, dataset_id, table_id):
         - client (BigQuery instance): A BigQuery client object.
         - project_id (str): BigQuery project name.
         - dataset_id (str): BigQuery dataset name.
+        - rel_folder (str): Name ingest folder name for the most current release.
         - table_id (str): BigQuery table name.
     
     Returns:
@@ -66,6 +67,7 @@ def query_bigquery_table(client, project_id, dataset_id, table_id):
     query = f"""
         SELECT *
         FROM `{project_id}.{dataset_id}.{table_id}`
+        WHERE Status_Folder_Name = '{rel_folder}'
     """
     return client.query(query).to_dataframe()
 
@@ -181,13 +183,23 @@ def main():
     client = init_bq_client()
     syn = init_synapse_client()
 
+    # Get most recent ingest folder
+    folder_query = f"""
+        SELECT Status_Folder_Name
+        FROM `{PROJECT}.{RAW_DATASET}.raw_INDEXING_TABLE_All_Folders_With_Bound_Schemas`
+        WHERE Status_Folder_Name LIKE '%ingest%'
+        ORDER BY CAST(REGEXP_EXTRACT(Status_Folder_Name, r'v(\\d+)_ingest') AS INT64) DESC
+        LIMIT 1
+    """
+    latest_folder = client.query(folder_query).to_dataframe().iloc[0]["Status_Folder_Name"]
+
     ##########################
     # Provenance Table
     ##########################
 
     print_sub_section("PULLING THE PROVENANCE TABLE")
 
-    prov_table = query_bigquery_table(client, PROJECT, BRONZE_DATASET,
+    prov_table = query_bigquery_table(client, PROJECT, BRONZE_DATASET, latest_folder,
                                       "bronze_INDEXING_TABLE_All_Files_and_Records_ID_Provenance")
 
     load_bq(client, PROJECT, SILVER_DATASET,
@@ -226,12 +238,14 @@ def main():
     file_schema_query = f"""
         SELECT File_EntityId, name AS File_Name, Component, Schema_Version
         FROM `{PROJECT}.{BRONZE_DATASET}.bronze_INDEXING_TABLE_All_Files_With_Schema_Information`
+        WHERE Status_Folder_Name = '{latest_folder}'
     """
     file_schemas = client.query(file_schema_query).to_dataframe()
 
     record_schema_query = f"""
         SELECT Record_EntityId, Folder_EntityId, Component, HTAN_Center, Schema_Version
         FROM `{PROJECT}.{BRONZE_DATASET}.bronze_INDEXING_TABLE_All_RecordSets_With_Schema_Information`
+        WHERE Status_Folder_Name = '{latest_folder}'
     """
     record_schemas = client.query(record_schema_query).to_dataframe()
 
@@ -255,7 +269,7 @@ def main():
         component = table_id.split("_")[5]
 
         # Pull the metadata table from BQ
-        df = query_bigquery_table(client, PROJECT, BRONZE_DATASET, table_id)
+        df = query_bigquery_table(client, PROJECT, BRONZE_DATASET, latest_folder, table_id)
 
         if metadata_type == "Files":
             df = df.merge(file_schemas,
@@ -371,7 +385,9 @@ def main():
                     "Curator_Validation_Passed": curator_passed,
                     "Component_Validation_Passed": component_passed,
                     "Provenance_Validation_Passed": provenance_passed,
-                    "Validation_Completion": f"{curator_passed+component_passed+provenance_passed}/3"
+                    "Validation_Completion": f"{curator_passed+component_passed+provenance_passed}/3",
+                    "BQ_Hash_Record_ID": row["BQ_Hash_Record_ID"],
+                    "Status_Folder_Name": row["Status_Folder_Name"]
                 })
 
             # Push modified metadata table with appended errors
@@ -438,7 +454,9 @@ def main():
                 "Curator_Validation_Passed": curator_passed,
                 "Component_Validation_Passed": component_passed,
                 "Provenance_Validation_Passed": provenance_passed,
-                "Validation_Completion": f"{curator_passed+component_passed+provenance_passed}/3"
+                "Validation_Completion": f"{curator_passed+component_passed+provenance_passed}/3",
+                "BQ_Hash_ID": row["BQ_Hash_ID"],
+                "Status_Folder_Name": row["Status_Folder_Name"]
             })
 
         # Push modified metadata table with appended errors
