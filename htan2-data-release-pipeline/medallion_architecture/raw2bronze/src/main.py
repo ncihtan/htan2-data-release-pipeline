@@ -9,8 +9,8 @@ Requires (env):
 - GOOGLE_CLOUD_PROJECT (defaults to 'htan2-dcc')
 - BQ_DATASET (defaults to 'htan2_synapse_bronze')
 
-Authors: Dar'ya Pozhidayeva
-Updated: 06-16-2026
+Authors: Dar'ya Pozhidayeva, Yamina Katariya
+Updated: 06-30-2026
 """
 
 import pandas as pd
@@ -69,42 +69,43 @@ def mint_record_id(
     payload_fields_by_component: dict,
     namespace: str = "HTAN",
     version: str = "v1",
-    length: int = 16,
-) -> str | None:
+    length: int = 16) -> str | None:
     
+    # 1. Fetch the baseline payload fields for this component
+    payload_fields = payload_fields_by_component.get(component)
+    
+    if payload_fields is None:
+        raise ValueError(f"No necessary fields defined for component: '{component}'")
+        
+    cleaned = []
+    
+    # 2. Process the standard payload fields
+    for field in payload_fields:
+        val = row.get(field)
+        if val is None:
+            return None
+        val = str(val).strip()
+        
+        if val == "" or val.lower() == "nan":
+            return None
+            
+        cleaned.append(val)
+    
+    # 3. Conditional addition: Inject row_index *only* for specific components
     if component in ("SpatialPanel", "ChannelMetadata"):
-        # Use row_index to generate the hash if spatial or channel metadata.
         row_idx = row.get("row_index")
         
         if row_idx is None or pd.isna(row_idx):
             return None
             
-        id_segment = str(row_idx).strip()
+        cleaned.append(str(row_idx).strip())
         
-    else:
-        #Use regular payloads for the rest
-        payload_fields = payload_fields_by_component.get(component)
-        
-        if payload_fields is None:
-            raise ValueError(f"No necessary fields defined for component: '{component}'")
-            
-        cleaned = []
-        for field in payload_fields:
-            val = row.get(field)
-            if val is None:
-                return None
-            val = str(val).strip()
-            
-            if val == "" or val.lower() == "nan":
-                return None
-                
-            cleaned.append(val)
-            
-        id_segment = "|".join(cleaned)
-        
+    # 4. Generate the unique ID
+    id_segment = "|".join(cleaned)
     payload = f"{namespace}|{version}|{id_segment}".encode("utf-8")
     digest = hashlib.sha256(payload).digest()
     token = base64.urlsafe_b64encode(digest).decode("utf-8").rstrip("=")
+    
     return token[:length]
 # --------------------------------------------------------------------------------------
 #MAIN
