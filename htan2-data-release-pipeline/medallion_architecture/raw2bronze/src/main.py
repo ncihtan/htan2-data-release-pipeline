@@ -32,7 +32,7 @@ from client_load import (
     init_synapse_client,
 )
 # --------------------------------------------------------------------------------------
-# Settings (env-overridable)
+#Settings (env-overridable)
 HTAN_BQ_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT", "htan2-dcc")
 MEDALLION_LAYER = os.getenv("BQ_DATASET", "htan2_medallion_bronze")
 # --------------------------------------------------------------------------------------
@@ -71,7 +71,7 @@ def mint_record_id(
     version: str = "v1",
     length: int = 16) -> str | None:
     
-    # 1. Fetch the baseline payload fields for this component
+    #Fetch the baseline payload fields for this component
     payload_fields = payload_fields_by_component.get(component)
     
     if payload_fields is None:
@@ -79,7 +79,7 @@ def mint_record_id(
         
     cleaned = []
     
-    # 2. Process the standard payload fields
+    #Process the standard payload fields
     for field in payload_fields:
         val = row.get(field)
         if val is None:
@@ -91,7 +91,7 @@ def mint_record_id(
             
         cleaned.append(val)
     
-    # 3. Conditional addition: Inject row_index *only* for specific components
+    #Inject row_index only for Spatial and Channel Records
     if component in ("SpatialPanel", "ChannelMetadata"):
         row_idx = row.get("row_index")
         
@@ -100,7 +100,7 @@ def mint_record_id(
             
         cleaned.append(str(row_idx).strip())
         
-    # 4. Generate the unique ID
+    #Generate the unique ID
     id_segment = "|".join(cleaned)
     payload = f"{namespace}|{version}|{id_segment}".encode("utf-8")
     digest = hashlib.sha256(payload).digest()
