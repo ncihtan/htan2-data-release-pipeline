@@ -490,6 +490,135 @@ def main():
         load_bq(client, PROJECT, SILVER_DATASET,
                 "silver_INDEXING_TABLE_All_Record_Errors",
                 record_error_table)
+        
+        
+    ##########################
+    # Validation Table Generation
+    ##########################
+    #-----BYPASS LIST------
+    bypass_file_query = """
+        SELECT *
+        FROM `htan2-dcc.htan2_synapse_raw.raw_INDEXING_TABLE_All_Bypass_Validation_Table`
+        WHERE Type = "File"
+        """
+    bypass_files = client.query(bypass_file_query).to_dataframe()
 
+    bypass_record_query = """
+        SELECT *
+        FROM `htan2-dcc.htan2_synapse_raw.raw_INDEXING_TABLE_All_Bypass_Validation_Table`
+        WHERE Type = "Record"
+        """
+    bypass_records = client.query(bypass_record_query).to_dataframe()
+    #-----FILES------
+    ###TEMPORARY BECAUSE FILE FOLDERS ARE EMPTY
+    file_validation_query = f"""
+        SELECT *
+        FROM `{PROJECT}.{SILVER_DATASET}.silver_INDEXING_TABLE_All_File_Errors`
+    """
+    file_error_table = client.query(file_validation_query).to_dataframe()
+    file_folder_information = f"""
+        SELECT File_EntityId, Folder_EntityId, Status_Folder_Name
+        FROM `{PROJECT}.{RAW_DATASET}.raw_INDEXING_TABLE_All_Files_With_Validation_Status`
+    """
+    files_folders = client.query(file_folder_information).to_dataframe()
+    file_error_table = pd.merge(file_error_table, files_folders, on=['File_EntityId'], how='inner')
+    ###TEMPORARY BECAUSE FILE FOLDERS ARE EMPTY
+    
+    #Filter on files that pass validation OR are on the bypass list.
+    validation_passed_files = file_error_table[(file_error_table['Validation_Completion'] == '3/3') | (file_error_table['File_EntityId'].isin(bypass_files['File_EntityId']))]
+    #push file table to BQ
+    load_bq(
+            client,
+            PROJECT,
+            SILVER_DATASET,
+            "silver_INDEXING_TABLE_VALIDATION_RESULTS_All_Files_Passed",
+            validation_passed_files
+        )
+    #Summarize file validation counts
+    summary_count_files = validation_passed_files.groupby(['Component', 'HTAN_Center', 'Status_Folder_Name']).size().reset_index(name='Number_of_Files')
+    #Push file counts to bq
+    load_bq(
+            client,
+            PROJECT,
+            SILVER_DATASET,
+            "silver_INDEXING_TABLE_VALIDATION_RESULTS_All_File_Passed_Counts",
+            summary_count_files
+        )
+    
+    #-----RECORDS------
+    #Filter on Record rows that pass validation by matching on the following IDs OR are on the bypass list:
+    match_cols = [
+        'Record_EntityId', 
+        'HTAN_PARTICIPANT_ID', 
+        'HTAN_BIOSPECIMEN_ID', 
+        'HTAN_PANEL_ID',
+        'Folder_EntityId']
+    
+    bypass_temp = bypass_records[match_cols].drop_duplicates()
+    bypass_temp['is_bypass'] = True
+    
+    record_bypassed = record_error_table.merge(
+        bypass_temp, 
+        on=match_cols,
+        how='left')
+    
+    validation_passed_records = record_bypassed[
+        (record_bypassed['Validation_Completion'] == '3/3') | 
+        (record_bypassed['is_bypass'] == True)
+        ].drop(columns=['is_bypass'])
+    
+    collected_dfs = []
+    silver_tables = list(client.list_tables(f"{PROJECT}.{SILVER_DATASET}"))
+    
+    silver_metadata = [table.table_id
+        for table in silver_tables
+        if table.table_id.startswith("silver_METADATA_TABLE_All_Records")]
+    
+    for table_id in silver_metadata:
+        metadata_type = table_id.split("_")[4]
+        component = table_id.split("_")[5]
+        
+        df = query_bigquery_table(client, PROJECT, SILVER_DATASET, latest_folder, table_id)
+        df = df[df['Record_EntityId'].isin(validation_passed_records['Record_EntityId'])]
+        #Match on BQ_Hash_ID
+        df = df[df['BQ_Hash_Record_ID'].isin(validation_passed_records['BQ_Hash_Record_ID'])]
+        
+        df['RecordSet_Row_Index'] = df.index
+        
+        collected_dfs.append(df)
+    
+    #list of necessary columns
+    necessary_columns = ['Component', 'Record_EntityId', 'RecordSet_Row_Index', "Folder_EntityId", 'HTAN_PARTICIPANT_ID', 'HTAN_BIOSPECIMEN_ID', 'HTAN_PANEL_ID' , 'HTAN_Center', 'Status_Folder_Name', 'BQ_Hash_Record_ID']
+
+    # Combine everything into a single DataFrame outside the loop
+    if collected_dfs:
+        # pd.concat handles the outer join, keeping all columns from all dfs
+        combined_df = pd.concat(collected_dfs, ignore_index=True)
+        
+        # Subset to only the necessary columns (fills missing ones with null/NaN)
+        validation_passed_records = combined_df.reindex(columns=necessary_columns)
+    else:
+        # Fallback if no tables returned data, initialized with your target columns
+        validation_passed_records = pd.DataFrame(columns=necessary_columns) 
+        
+    load_bq(
+            client,
+            PROJECT,
+            SILVER_DATASET,
+            "silver_INDEXING_TABLE_VALIDATION_RESULTS_All_Record_Row_Results",
+            validation_passed_records
+        )
+    
+    summary_count_records = validation_passed_records.groupby(['Component', 'HTAN_Center', 'Status_Folder_Name']).size().reset_index(name='Number_Rows_in_RecordSet')
+    
+    load_bq(
+            client,
+            PROJECT,
+            SILVER_DATASET,
+            "silver_INDEXING_TABLE_VALIDATION_RESULTS_All_Record_Row_Passed_Counts",
+            summary_count_records
+        )
+    
+    
 if __name__ == "__main__":
     main()
