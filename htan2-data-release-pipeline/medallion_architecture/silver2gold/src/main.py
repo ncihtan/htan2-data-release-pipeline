@@ -14,7 +14,7 @@ Functions:
     - print_sub_section(title)
     
 Author: Dar'ya Pozhidayeva, Yamina Katariya
-Updated: 05/06/2026
+Updated: 07/1/2026
 """
 import pandas as pd
 from client_load import (
@@ -26,10 +26,10 @@ from client_load import (
 #####################################################
 PROJECT = "htan2-dcc"
 RAW_DATASET = "htan2_synapse_raw"
+BRONZE_DATASET = "htan2_medallion_bronze"
 SILVER_DATASET = "htan2_medallion_silver"
 GOLD_DATASET = "htan2_medallion_gold"
 DM_DATASET = "htan2_data_model_cache"
-
 #####################################################
 #                 HELPER FUNCTIONS
 #####################################################
@@ -63,189 +63,231 @@ def print_sub_section(title):
     border = "=" * (len(title) + 8)
     print(f"\n{border}\n>>> {title.upper()} <<<\n{border}\n")
 
+#####################################################
+#                   MAIN 
+#####################################################=
 def main():
     """
     Entry point into the GOLD layer.
     """
     # Initialize BQ Client
     client = init_bq_client()
-    
-    print_sub_section("PULLING FILE FOLDER INFORMATION")
-    #---------------------------------------------------------------------------------
-    file_folder_information = f"""
-        SELECT File_EntityId, Folder_EntityId, Status_Folder_Name
-        FROM `{PROJECT}.{RAW_DATASET}.raw_INDEXING_TABLE_All_Files_With_Validation_Status`
-    """
-    print(file_folder_information)
 
-    files_folders = client.query(file_folder_information).to_dataframe()
-    
-    file_validation_query = f"""
+    print_sub_section("PULLING FILE VALIDATION RESULTS IN SILVER LAYER")
+    #---------------------------------------------------------------------------------
+    file_validation_information = f"""
         SELECT *
-        FROM `{PROJECT}.{SILVER_DATASET}.silver_INDEXING_TABLE_All_File_Errors`
+        FROM `{PROJECT}.{SILVER_DATASET}.silver_INDEXING_TABLE_All_Files_Passed_Validation`
     """
-    print(file_validation_query)
+    print(file_validation_information)
 
-    file_validation_table = client.query(file_validation_query).to_dataframe()
+    validated_files = client.query(file_validation_information).to_dataframe()
     
-    file_validation_table = pd.merge(file_validation_table, files_folders, on=['File_EntityId'], how='inner')
-
-    print_sub_section("PULLING RECORD FOLDER INFORMATION")
-    #---------------------------------------------------------------------------------
-    record_folder_information = f"""
-        SELECT Record_EntityId, Folder_EntityId, Status_Folder_Name
-        FROM `{PROJECT}.{RAW_DATASET}.raw_INDEXING_TABLE_All_RecordSets_With_Validation_Status`
+    record_validation_information = f"""
+        SELECT *
+        FROM `{PROJECT}.{SILVER_DATASET}.silver_INDEXING_TABLE_All_Records_Passed_Validation`
     """
-    print(record_folder_information)
-    record_folders = client.query(record_folder_information).to_dataframe()
+    print(file_validation_information)
+    
+    validated_records = client.query(record_validation_information).to_dataframe()
 
-    record_validation_query = f"""
-        SELECT *
-        FROM `{PROJECT}.{SILVER_DATASET}.silver_INDEXING_TABLE_All_Record_Errors`
-    """
-    print(record_validation_query)
-    record_validation_table = client.query(record_validation_query).to_dataframe()
-    record_validation_table = pd.merge(record_validation_table, record_folders, on=['Record_EntityId'], how='inner')
-
-
-    print_sub_section("FETCHING BYPASS TABLE FOR RELEASE")
+    print_sub_section("CREATING STAGING DATASETS FOR RELEASE")
     #---------------------------------------------------------------------------------
-    #VALIDATION BYPASS TABLES
-    bypass_file_query = f"""
-        SELECT *
-        FROM `{PROJECT}.{RAW_DATASET}.raw_INDEXING_TABLE_All_Bypass_Validation_Table`
-        WHERE Type = "File"
-        """
-    bypass_files = client.query(bypass_file_query).to_dataframe()
-    print(bypass_file_query)
-    #VALIDATION BYPASS TABLES
-    bypass_record_query = f"""
-        SELECT *
-        FROM `{PROJECT}.{RAW_DATASET}.raw_INDEXING_TABLE_All_Bypass_Validation_Table`
-        WHERE Type = "Record"
-        """
-    bypass_records = client.query(bypass_record_query).to_dataframe()
-    print(bypass_record_query)
+    #Confirmed Centers for Release Table
+    url = "https://docs.google.com/spreadsheets/d/1wQ5XZ9uYtAzKKe3cANam8UBdOofuFaAEod-AWDdWK8Q/export?format=csv&gid=0" # Skip the header lines in the doc.
+    confirmed_center_list = pd.read_csv(url, skiprows=4)
+    #Load to BQ
+    load_bq(
+        client,
+        PROJECT,
+        GOLD_DATASET,
+        "gold_STAGING_FOR_RELASE_INDEXING_TABLE_Confirmed_Centers_in_Data_Releases",
+        confirmed_center_list)
 
-    print_sub_section("STAGING RELEASE FILES AND RECORDS")
-    #---------------------------------------------------------------------------------
-    #Filter on files that pass validation OR are on the bypass list.
-    release_staged_files = file_validation_table[(file_validation_table['Validation_Completion'] == '3/3') | (file_validation_table['File_EntityId'].isin(bypass_files['File_EntityId']))]
-
-
-    #Filter on Record rows that pass validation by matching on the following IDs OR are on the bypass list and match the IDs:
-    match_cols = [
-        'Record_EntityId', 
-        'HTAN_PARTICIPANT_ID', 
-        'HTAN_BIOSPECIMEN_ID', 
-        'HTAN_PANEL_ID']
-    
-    bypass_temp = bypass_records[match_cols].drop_duplicates()
-    bypass_temp['is_bypass'] = True
-    
-    merged_table = record_validation_table.merge(
-        bypass_temp, 
-        on=match_cols,
-        how='left')
-    
-    release_staged_records = merged_table[
-        (merged_table['Validation_Completion'] == '3/3') | 
-        (merged_table['is_bypass'] == True)
-    ].drop(columns=['is_bypass'])
-    
-    #---------------------------------------------------------------------------------
-    print_sub_section("PRODUCING FILTERED COMPONENT-LEVEL-TABLES")
-    
-    silver_tables = list(client.list_tables(f"{PROJECT}.{SILVER_DATASET}"))
-    silver_metadata = [
+    bronze_tables = list(client.list_tables(f"{PROJECT}.{BRONZE_DATASET}"))
+    bronze_metadata = [
         table.table_id
-        for table in silver_tables
-        if table.table_id.startswith("silver_METADATA_TABLE_All_")]
+        for table in bronze_tables
+        if table.table_id.startswith("bronze_METADATA_TABLE_All")]
     
-    for table_id in silver_metadata:
-        print("Filtering Table To Stage for Release: "  +  table_id)                
+    collected_files_list = []
+    collected_records_list = []
+    
+    for table_id in bronze_metadata:
+        print(table_id)                
         metadata_type = table_id.split("_")[4]
         component = table_id.split("_")[5]
         
+        df = None
+        
         if metadata_type == "Files":
-            df = query_bigquery_table(client, PROJECT, SILVER_DATASET, table_id)
-            
-            df = df[df['File_EntityId'].isin(release_staged_files['File_EntityId'])]
+            df = query_bigquery_table(client, PROJECT, BRONZE_DATASET, table_id)
+            #File entityid remains the same regardless of location
+            df = df[df['File_EntityId'].isin(validated_files['File_EntityId'])]
+            df = df[df['Status_Folder_Name'].str.contains('ingest|staging')]
+            df = df[df['HTAN_Center'].isin(confirmed_center_list['HTAN_Center'])]
+            if not df.empty:
+                file_slice = df[['Filename','File_EntityId', 'HTAN_Center', 'Status_Folder_Name', 'BQ_Hash_ID', 'Component']].copy()
+                collected_files_list.append(file_slice)
         
         if metadata_type == "Records":
-            df = query_bigquery_table(client, PROJECT, SILVER_DATASET, table_id)
-            #Subset record entity first
-            df = df[df['Record_EntityId'].isin(release_staged_records['Record_EntityId'])]
-            #define which elements to match on based on the record type:
-            if component == "Biospecimen":
-                df = df[df['HTAN_BIOSPECIMEN_ID'].isin(release_staged_records['HTAN_BIOSPECIMEN_ID'])]  
-                
-            elif "Panel" in component or "Channel" in component:
-                df = df[df['HTAN_PANEL_ID'].isin(release_staged_records['HTAN_PANEL_ID'])]  
-                
-            else:                         
-                df = df[df['HTAN_PARTICIPANT_ID'].isin(release_staged_records['HTAN_PARTICIPANT_ID'])]
+            df = query_bigquery_table(client, PROJECT, BRONZE_DATASET, table_id)
+            df = df[df['BQ_Hash_Record_ID'].isin(validated_records['BQ_Hash_Record_ID'])]
+            df = df[df['Status_Folder_Name'].str.contains('ingest|staging')]
+            df = df[df['HTAN_Center'].isin(confirmed_center_list['HTAN_Center'])]
+            
+            if not df.empty:
+                record_slice = df[['Record_EntityId', 'BQ_Hash_Record_ID', 'HTAN_Center', 'Component', 'Status_Folder_Name']].copy()
+                collected_records_list.append(record_slice)
         
-        #Remove Validation Columns After Filtering
-        validation_columns = ['Validation', 'Error', 'Violations']
-        cols_to_drop = [col for col in df.columns if any(val_column in col for val_column in validation_columns)]
-        df = df.drop(columns=cols_to_drop)
-        table_name = f"gold_METADATA_TABLE_All_{metadata_type}_{component}"
+
+    if collected_files_list:
+        staged_files_df = pd.concat(collected_files_list, ignore_index=True)
+    else:
+        staged_files_df = pd.DataFrame(columns=['Filename','File_EntityId', 'HTAN_Center', 'Status_Folder_Name', 'BQ_Hash_ID', 'Component'])
+    
+    load_bq(
+            client,
+            PROJECT,
+            GOLD_DATASET,
+            "gold_STAGING_FOR_RELEASE_INDEXING_TABLE_All_File_Staged_For_Current_Release",
+            staged_files_df
+        )
+    
+    staged_summary_count_files = staged_files_df.groupby(['Component', 'HTAN_Center', 'Status_Folder_Name']).size().reset_index(name='Number_of_Files')
+    
+    load_bq(
+            client,
+            PROJECT,
+            GOLD_DATASET,
+            "gold_STAGING_FOR_RELEASE_INDEXING_TABLE_All_File_Staged_For_Current_Release_Counts",
+            staged_summary_count_files
+        )
+    
+    
+    if collected_records_list:
+        staged_records_df = pd.concat(collected_records_list, ignore_index=True)
+    else:
+        staged_records_df = pd.DataFrame(columns=['Record_EntityId', 'BQ_Hash_Record_ID', 'HTAN_Center', 'Component', 'Status_Folder_Name'])
+
+    load_bq(
+            client,
+            PROJECT,
+            GOLD_DATASET,
+            "gold_STAGING_FOR_RELEASE_INDEXING_TABLE_All_Record_Rows_Staged_For_Current_Release",
+            staged_records_df
+        )
+    
+    
+    staged_summary_count_records = staged_records_df.groupby(['Component', 'HTAN_Center', 'Status_Folder_Name']).size().reset_index(name='Number_Rows_in_RecordSet')
+    
+    load_bq(
+            client,
+            PROJECT,
+            GOLD_DATASET,
+            "gold_STAGING_FOR_RELEASE_INDEXING_TABLE_All_Record_Rows_Staged_For_Current_Release_Counts",
+            staged_summary_count_records
+        )
+    
+    
+    print_sub_section("GENERATING CURRENTLY RELEASED FILES")
+    #---------------------------------------------------------------------------------    
+    bronze_tables = list(client.list_tables(f"{PROJECT}.{BRONZE_DATASET}"))
+    bronze_metadata = [
+        table.table_id
+        for table in bronze_tables
+        if table.table_id.startswith("bronze_METADATA_TABLE_All_")]
+    
+    released_entities = []
+    released_records = []
+    
+    #For Dropping the validation columns
+    validation_columns = ['Validation', 'Error', 'Violations', 'Valid', 'Validated']
+    for table_id in bronze_metadata:
+        print("Filtering Table To Released Files: "  +  table_id)                
+        metadata_type = table_id.split("_")[4]
+        component = table_id.split("_")[5]
         
-        load_bq(
+        df = None
+        
+        if metadata_type == "Files":
+            df = query_bigquery_table(client, PROJECT, BRONZE_DATASET, table_id)
+            df = df[df['Status_Folder_Name'].str.contains('release')]
+            cols_to_drop = [col for col in df.columns if any(val_column in col for val_column in validation_columns)]
+            df = df.drop(columns=cols_to_drop)
+                        
+            
+            if not df.empty:
+                file_slice = df[['File_EntityId', 'BQ_Hash_ID']].copy()
+                released_entities.append(file_slice)
+                
+        if metadata_type == "Records":
+            df = query_bigquery_table(client, PROJECT, BRONZE_DATASET, table_id)
+            df = df[df['Status_Folder_Name'].str.contains('release')]
+            cols_to_drop = [col for col in df.columns if any(val_column in col for val_column in validation_columns)]
+            df = df.drop(columns=cols_to_drop)
+                        
+            if not df.empty:
+                record_slice = df[['Record_EntityId', 'BQ_Hash_Record_ID']].copy()
+                released_records.append(record_slice)
+        
+        if df is not None:
+            table_name = f"gold_RELEASED_METADATA_TABLE_All_{metadata_type}_{component}"
+            load_bq(
                 client,
                 PROJECT,
                 GOLD_DATASET,
                 table_name,
                 df
             )
-        #---------------------------------------------------------------------------------
-    print_sub_section("GENERATING SUMMARY LEVEL-TABLES")
-    #File level validated files - push to BQ
-    release_staged_files
-    cols_to_drop = [col for col in release_staged_files.columns if any(val_column in col for val_column in validation_columns)]
-    release_staged_files = release_staged_files.drop(columns=cols_to_drop)
     
-    load_bq(
-                client,
-                PROJECT,
-                GOLD_DATASET,
-                "gold_INDEXING_TABLE_All_File_Validation_Passed",
-                release_staged_files
-            )
-    #---------------------------------------------------------------------------------
-    summary_count_files = release_staged_files.groupby(['Component', 'HTAN_Center', 'Status_Folder_Name']).size().reset_index(name='Number_of_Files')
-    load_bq(
-                client,
-                PROJECT,
-                GOLD_DATASET,
-                "gold_INDEXING_TABLE_All_File_Validation_Passed_File_Counts",
-                summary_count_files
-            )
-    #---------------------------------------------------------------------------------
-    #Record level validated files - push to BQ
-    release_staged_records
-    cols_to_drop = [col for col in release_staged_records.columns if any(val_column in col for val_column in validation_columns)]
-    release_staged_records = release_staged_records.drop(columns=cols_to_drop)
-    #---------------------------------------------------------------------------------
-    load_bq(
-                client,
-                PROJECT,
-                GOLD_DATASET,
-                "gold_INDEXING_TABLE_All_Record_Validation_Passed",
-                release_staged_records
-            )
-    #---------------------------------------------------------------------------------
+    #Final Files DataFrame
+    if released_entities:
+        current_released_entities = pd.concat(released_entities, ignore_index=True)
+    else:
+        current_released_entities = pd.DataFrame(columns=['File_EntityId', 'BQ_Hash_ID'])
+    
+    #Final Records DataFrame
+    if released_records:
+        current_released_records = pd.concat(released_records, ignore_index=True)
+    else:
+        current_released_records = pd.DataFrame(columns=['Record_EntityId', 'BQ_Hash_Record_ID'])
 
-    summary_count_records = release_staged_records.groupby(['Component', 'HTAN_Center', 'Status_Folder_Name']).size().reset_index(name='Number_Rows_in_RecordSet')
+    load_bq(
+            client,
+            PROJECT,
+            GOLD_DATASET,
+            "gold_RELEASED_INDEXING_TABLE_Released_Entities",
+            current_released_entities
+        )
     
     load_bq(
-                client,
-                PROJECT,
-                GOLD_DATASET,
-                "gold_INDEXING_TABLE_All_RecordSet_Validation_Passed_Row_Counts",
-                summary_count_records
-            )
+            client,
+            PROJECT,
+            GOLD_DATASET,
+            "gold_RELEASED_INDEXING_TABLE_Released_RecordsetRows",
+            current_released_records
+        )
+    
+    
+    print_sub_section("PULLING BRONZE PROVENANCE TABLE")
+    #---------------------------------------------------------------------------------
+    bronze_provenance_query = f"""
+        SELECT *
+        FROM `{PROJECT}.{BRONZE_DATASET}.bronze_INDEXING_TABLE_All_Files_and_Records_ID_Provenance`
+    """
+
+    bronze_prov = client.query(bronze_provenance_query).to_dataframe()
+    gold_prov = bronze_prov[bronze_prov['File_EntityId'].isin(current_released_entities['File_EntityId'])]
+    
+    load_bq(
+            client,
+            PROJECT,
+            GOLD_DATASET,
+            "gold_RELEASED_INDEXING_TABLE_All_Files_and_Records_ID_Provenance",
+            gold_prov
+        )
+
     #---------------------------------------------------------------------------------
     print_sub_section("FETCHING AND UPDATING LATEST DATA MODEL TABLE")
 
@@ -279,8 +321,8 @@ def main():
             'gold_INDEXING_TABLE_Tabular_Data_Model',
             latest_model
         )
+        
 
-    
 
 if __name__ == "__main__":
     main()
