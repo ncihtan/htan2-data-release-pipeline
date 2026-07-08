@@ -107,6 +107,16 @@ def main():
             uberon_codes
         )
 
+    #UPDATE THE PUBLICATIONS LIST. JSON FILE IS UPDATED BY ALEX LASH AS NEEDED.
+    curated_publications = pd.read_json('publication_management_file/publications_manifest_all_eutils.json')
+    load_bq(
+            client,
+            PROJECT,
+            MAP_DATASET,
+            "HTAN2_Mapping_Data_to_Publications",
+            curated_publications
+        )
+
 if __name__ == "__main__":
     main()
 
