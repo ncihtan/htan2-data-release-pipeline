@@ -108,7 +108,18 @@ def main():
         )
 
     #UPDATE THE PUBLICATIONS LIST. JSON FILE IS UPDATED BY ALEX LASH AS NEEDED.
-    curated_publications = pd.read_json('publication_management_file/publications_manifest_all_eutils.json')
+    url = (
+    "https://raw.githubusercontent.com/"
+    "ncihtan/htan2-data-release-pipeline/"
+    "refs/heads/main/"
+    "htan2-data-release-pipeline/"
+    "medallion_architecture/gold2mapping/src/"
+    "publication_management_file/"
+    "publications_manifest_all_eutils.json"
+    )
+
+    curated_publications = pd.read_json(url)
+    
     load_bq(
             client,
             PROJECT,
