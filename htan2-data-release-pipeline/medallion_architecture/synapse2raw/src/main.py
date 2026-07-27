@@ -30,6 +30,8 @@ import pandas as pd
 import requests
 import yaml
 from synapseclient import EntityViewSchema, EntityViewType
+from concurrent.futures import ThreadPoolExecutor
+from typing import List, Dict, Any
 
 from client_load import (
     load_bq,
@@ -192,30 +194,19 @@ def get_validation_summary(syn, entity_id: str) -> Dict[str, Any]:
             "validated_on": "",
         }
 
-def collect_all_fileviews(syn, phase2_centers: pd.DataFrame, view_col: str = "Fileview_EntityId") -> pd.DataFrame:
+def collect_all_fileviews(
+    syn, 
+    phase2_centers: pd.DataFrame, 
+    view_col: str = "Fileview_EntityId",
+    max_workers: int = 10
+) -> pd.DataFrame:
     dfs: List[pd.DataFrame] = []
 
     BASE_COLUMNS = [
-        "id",
-        "name",
-        "parentId",
-        "projectId",
-        "createdOn",
-        "createdBy",
-        "modifiedOn",
-        "modifiedBy",
-        "etag",
-        "path",
-        "type",
-        "currentVersion",
-        "dataFileHandleId",
-        "dataFileName",
-        "dataFileSizeBytes",
-        "dataFileMD5Hex",
-        "dataFileConcreteType",
-        "dataFileBucket",
-        "dataFileKey",
-        "benefactorId",
+        "id", "name", "parentId", "projectId", "createdOn", "createdBy",
+        "modifiedOn", "modifiedBy", "etag", "path", "type", "currentVersion",
+        "dataFileHandleId", "dataFileName", "dataFileSizeBytes", "dataFileMD5Hex",
+        "dataFileConcreteType", "dataFileBucket", "dataFileKey", "benefactorId",
         "description",
     ]
 
@@ -234,17 +225,31 @@ def collect_all_fileviews(syn, phase2_centers: pd.DataFrame, view_col: str = "Fi
             df = syn.tableQuery(query).asDataFrame()
             df["source_fileview"] = view_id
 
-            if df.empty:
-                dfs.append(df)
-                continue
+            df["is_valid"] = None
+            df["validation_error_message"] = None
+            df["all_validation_messages"] = None
+            df["validated_on"] = None
 
-            log.info("Running schema validation per file for %s (%d files)", view_id, len(df))
-            validation_results = df["id"].apply(lambda eid: get_validation_summary(syn, str(eid)))
+            if not df.empty:
+                log.info("Running parallel schema validation per file for %s (%d files)", view_id, len(df))
+                
+                def _fetch_validation(eid: Any) -> Dict[str, Any]:
+                    try:
+                        return get_validation_summary(syn, str(eid))
+                    except Exception as err:
+                        log.warning("Validation failed for entity %s: %s", eid, err)
+                        return {}
 
-            df["is_valid"] = validation_results.map(lambda x: x.get("is_valid"))
-            df["validation_error_message"] = validation_results.map(lambda x: x.get("validation_error_message"))
-            df["all_validation_messages"] = validation_results.map(lambda x: x.get("all_validation_messages"))
-            df["validated_on"] = validation_results.map(lambda x: x.get("validated_on"))
+                # Execute API calls concurrently
+                file_ids = df["id"].tolist()
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    validation_results = list(executor.map(_fetch_validation, file_ids))
+
+                # Map parsed dictionary results back to columns
+                df["is_valid"] = [r.get("is_valid") for r in validation_results]
+                df["validation_error_message"] = [r.get("validation_error_message") for r in validation_results]
+                df["all_validation_messages"] = [r.get("all_validation_messages") for r in validation_results]
+                df["validated_on"] = [r.get("validated_on") for r in validation_results]
 
             dfs.append(df)
 
@@ -263,7 +268,6 @@ def collect_all_fileviews(syn, phase2_centers: pd.DataFrame, view_col: str = "Fi
     )
 
     return final_df
-
 
 def load_center_liaisons() -> pd.DataFrame:
     if CENTER_LIAISONS_URL:
