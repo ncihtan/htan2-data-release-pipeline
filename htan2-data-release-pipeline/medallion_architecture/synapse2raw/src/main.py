@@ -17,63 +17,57 @@ Requires (env):
 Authors: Dar'ya Pozhidayeva
 Updated: 2026-07-27
 """
-
 from __future__ import annotations
 
+import logging
 import os
 import re
 import time
-import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import requests
 import yaml
+from client_load import init_bq_client, init_synapse_client, load_bq
 from synapseclient import EntityViewSchema, EntityViewType
-from concurrent.futures import ThreadPoolExecutor
-from typing import List, Dict, Any
-
-from client_load import (
-    load_bq,
-    init_bq_client,
-    init_synapse_client,
-)
 
 # --------------------------------------------------------------------------------------
-# Settings (env-overridable)
+# Settings
+# --------------------------------------------------------------------------------------
 HTAN_BQ_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT", "htan2-dcc")
 MEDALLION_LAYER = os.getenv("BQ_DATASET", "htan2_synapse_raw")
-
 HTAN_DEV = os.getenv("HTAN_DEV_PARENT", "syn68755168")
 
 SCHEMA_BINDING_CONFIG_URL = os.getenv(
     "SCHEMA_BINDING_CONFIG_URL",
     "https://raw.githubusercontent.com/ncihtan/htan2_project_setup/refs/heads/main/schema_binding_config.yml",
 )
-
 CENTER_LIAISONS_URL = os.getenv("CENTER_LIAISONS_URL", "").strip()
 CENTER_LIAISONS_PATH = os.getenv("CENTER_LIAISONS_PATH", "configs/center_liasons.yaml")
 
 HTTP_TIMEOUT = int(os.getenv("HTTP_TIMEOUT_SECONDS", "60"))
 SYNAPSE_RETRIES = int(os.getenv("SYNAPSE_RETRIES", "5"))
 SYNAPSE_BACKOFF_BASE_SECONDS = float(os.getenv("SYNAPSE_BACKOFF_BASE_SECONDS", "0.75"))
+MAX_WORKERS = int(os.getenv("MAX_WORKERS", "10"))
+
+EXCLUDED_PROJECTS_REGEX = r"(HTAN2_BQDEVPROJECT|htan2-testing1)"
 
 # --------------------------------------------------------------------------------------
-#Set Logging
+# Logging Setup
+# --------------------------------------------------------------------------------------
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 log = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------------------
-# Helper Functions
+# Helpers
+# --------------------------------------------------------------------------------------
 def http_get_text(url: str, timeout: int = HTTP_TIMEOUT) -> str:
     r = requests.get(url, timeout=timeout)
     r.raise_for_status()
     return r.text
 
 def syn_rest_get(syn, path: str) -> Dict[str, Any]:
-    """
-    Synapse REST GET with retry for transient failures.
-    """
     last_err: Optional[Exception] = None
     for attempt in range(1, SYNAPSE_RETRIES + 1):
         try:
@@ -84,62 +78,34 @@ def syn_rest_get(syn, path: str) -> Dict[str, Any]:
             time.sleep(sleep_s)
     raise last_err  # type: ignore[misc]
 
-def safe_contains(series: pd.Series, pattern: str, flags: int = re.IGNORECASE) -> pd.Series:
-    s = series.fillna("").astype(str)
-    return s.str.contains(pattern, flags=flags, regex=True)
-
-#--------------------------------------------------------------------------------------
-#Core Functions Needed
 def data_frames_from_config(binding_dictionary: Dict[str, Any]) -> pd.DataFrame:
     project_rows: List[Dict[str, Any]] = []
     for _, value in binding_dictionary.items():
-        projects = value.get("projects", [])
-        for project in projects:
-            project_rows.append(
-            {
+        for project in value.get("projects", []):
+            project_rows.append({
                 "HTAN_Center": project.get("name"),
                 "Folder_EntityId": project.get("synapse_id"),
                 "Annotation_EntityId": project.get("fileview_id"),
                 "Folder_Source_Path": project.get("subfolder"),
-            }
-            )
+            })
     return pd.DataFrame(project_rows)
 
-def ensure_entity_view(
-    syn,
-    project_id: str,
-    project_name: str,
-    entity_type: EntityViewType,
-    parent_id: str,
-    add_annotation_columns: bool):
-    """
-    Create OR UPDATE a Synapse EntityView (FolderView or FileView).
-    """
+def ensure_entity_view(syn, project_id: str, project_name: str, entity_type: EntityViewType, parent_id: str) -> Optional[str]:
     try:
         view_name = f"{project_name}_{entity_type.name.capitalize()}View"
-
         view = EntityViewSchema(
             name=view_name,
             parent=parent_id,
             scopes=[project_id],
             includeEntityTypes=[entity_type],
             addDefaultViewColumns=True,
-            addAnnotationColumns=add_annotation_columns,
+            addAnnotationColumns=False,
         )
-
         view = syn.store(view)
-        log.info("Touched %s for %s: %s", f"{entity_type.name}View", project_name, view.id)
-
+        log.info("Touched %sView for %s: %s", entity_type.name, project_name, view.id)
         return view.id
-
     except Exception as e:
-        log.exception(
-            "%sView failed for %s (%s): %s",
-            entity_type.name,
-            project_name,
-            project_id,
-            e,
-        )
+        log.exception("%sView failed for %s (%s): %s", entity_type.name, project_name, project_id, e)
         return None
 
 def count_view_rows(syn, view_id: Optional[str], label: str) -> int:
@@ -152,40 +118,15 @@ def count_view_rows(syn, view_id: Optional[str], label: str) -> int:
         log.warning("Failed %s count for %s: %s", label, view_id, e)
         return 0
 
-
-def count_files_via_fileview(syn, file_view_id: Optional[str], folder_id: Optional[str]) -> int:
-    if not file_view_id or not folder_id or pd.isna(file_view_id) or pd.isna(folder_id):
-        return 0
-    try:
-        query = f"""
-        SELECT COUNT(*) AS n
-        FROM {file_view_id}
-        WHERE path LIKE '%/{folder_id}/%'
-        """
-        return int(syn.tableQuery(query).asDataFrame().iloc[0]["n"])
-    except Exception as e:
-        log.warning("Failed FileView count (view=%s, folder=%s): %s", file_view_id, folder_id, e)
-        return 0
-
-
 def get_validation_summary(syn, entity_id: str) -> Dict[str, Any]:
     try:
         val = syn_rest_get(syn, f"/entity/{entity_id}/schema/validation")
-
-        result = {
-            "is_valid": True,
-            "validation_error_message": "",
-            "all_validation_messages": "",
+        return {
+            "is_valid": val.get("isValid", True),
+            "validation_error_message": val.get("validationErrorMessage", "") if not val.get("isValid", True) else "",
+            "all_validation_messages": val.get("allValidationMessages", "") if not val.get("isValid", True) else "",
             "validated_on": val.get("validatedOn", ""),
         }
-
-        if not val.get("isValid", True):
-            result["is_valid"] = False
-            result["validation_error_message"] = val.get("validationErrorMessage")
-            result["all_validation_messages"] = val.get("allValidationMessages")
-
-        return result
-
     except Exception as e:
         return {
             "is_valid": None,
@@ -194,29 +135,16 @@ def get_validation_summary(syn, entity_id: str) -> Dict[str, Any]:
             "validated_on": "",
         }
 
-def collect_all_fileviews(
-    syn, 
-    phase2_centers: pd.DataFrame, 
-    view_col: str = "Fileview_EntityId",
-    max_workers: int = 10
-) -> pd.DataFrame:
+def collect_all_fileviews(syn, phase2_centers: pd.DataFrame, view_col: str = "Fileview_EntityId", max_workers: int = MAX_WORKERS) -> pd.DataFrame:
     dfs: List[pd.DataFrame] = []
-
     BASE_COLUMNS = [
         "id", "name", "parentId", "projectId", "createdOn", "createdBy",
         "modifiedOn", "modifiedBy", "etag", "path", "type", "currentVersion",
         "dataFileHandleId", "dataFileName", "dataFileSizeBytes", "dataFileMD5Hex",
-        "dataFileConcreteType", "dataFileBucket", "dataFileKey", "benefactorId",
-        "description",
+        "dataFileConcreteType", "dataFileBucket", "dataFileKey", "benefactorId", "description",
     ]
 
-    view_ids = (
-        phase2_centers.get(view_col, pd.Series(dtype="object"))
-        .dropna()
-        .astype(str)
-        .unique()
-        .tolist()
-    )
+    view_ids = phase2_centers.get(view_col, pd.Series(dtype="object")).dropna().astype(str).unique().tolist()
 
     for view_id in view_ids:
         try:
@@ -225,65 +153,40 @@ def collect_all_fileviews(
             df = syn.tableQuery(query).asDataFrame()
             df["source_fileview"] = view_id
 
-            df["is_valid"] = None
-            df["validation_error_message"] = None
-            df["all_validation_messages"] = None
-            df["validated_on"] = None
-
             if not df.empty:
-                log.info("Running parallel schema validation per file for %s (%d files)", view_id, len(df))
-                
-                def _fetch_validation(eid: Any) -> Dict[str, Any]:
-                    try:
-                        return get_validation_summary(syn, str(eid))
-                    except Exception as err:
-                        log.warning("Validation failed for entity %s: %s", eid, err)
-                        return {}
-
-                # Execute API calls concurrently
                 file_ids = df["id"].tolist()
                 with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                    validation_results = list(executor.map(_fetch_validation, file_ids))
+                    validation_results = list(executor.map(lambda eid: get_validation_summary(syn, str(eid)), file_ids))
 
-                # Map parsed dictionary results back to columns
                 df["is_valid"] = [r.get("is_valid") for r in validation_results]
                 df["validation_error_message"] = [r.get("validation_error_message") for r in validation_results]
                 df["all_validation_messages"] = [r.get("all_validation_messages") for r in validation_results]
                 df["validated_on"] = [r.get("validated_on") for r in validation_results]
 
             dfs.append(df)
-
         except Exception as e:
             log.exception("Failed fileview query/validation for %s: %s", view_id, e)
 
     final_df = pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
-
-    final_df = final_df.rename(
-        columns={
-            "is_valid": "Is_Valid",
-            "validation_error_message": "Validation_Error_Message",
-            "all_validation_messages": "All_Validation_Error_Messages",
-            "validated_on": "Validated_On",
-        }
-    )
-
-    return final_df
+    return final_df.rename(columns={
+        "is_valid": "Is_Valid",
+        "validation_error_message": "Validation_Error_Message",
+        "all_validation_messages": "All_Validation_Error_Messages",
+        "validated_on": "Validated_On",
+    })
 
 def load_center_liaisons() -> pd.DataFrame:
     if CENTER_LIAISONS_URL:
         text = http_get_text(CENTER_LIAISONS_URL)
         data = yaml.safe_load(text)
-        return pd.DataFrame(data.get("htan_centers", []))
-
-    with open(CENTER_LIAISONS_PATH, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
+    else:
+        with open(CENTER_LIAISONS_PATH, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
     return pd.DataFrame(data.get("htan_centers", []))
-
 
 def fetch_all_projects(syn) -> pd.DataFrame:
     all_projects: List[Dict[str, Any]] = []
     token: Optional[str] = None
-
     while True:
         path = "/projects" if not token else f"/projects?nextPageToken={token}"
         res = syn_rest_get(syn, path)
@@ -291,129 +194,80 @@ def fetch_all_projects(syn) -> pd.DataFrame:
         token = res.get("nextPageToken")
         if not token:
             break
-
     return pd.DataFrame(all_projects)
 
-#MAIN PROGRAM-------------------------------------------------------------------------------------
+def fetch_folder_schema(syn, item: Dict[str, Any]) -> Dict[str, Any]:
+    folder_id = item["Folder_EntityId"]
+    try:
+        binding = syn_rest_get(syn, f"/entity/{folder_id}/schema/binding")
+        schema_info = binding.get("jsonSchemaVersionInfo", {}) or {}
+        item["Bound_Schema_Name"] = schema_info.get("$id", "")
+        item["is_error"] = False
+    except Exception as e:
+        item["Error"] = str(e)
+        item["is_error"] = True
+    return item
+
+# --------------------------------------------------------------------------------------
+# Main
+# --------------------------------------------------------------------------------------
 def main() -> None:
-    #Instantiate the relevant clients
     syn = init_synapse_client()
     client = init_bq_client()
-    
-    #Create all center table by establishing fileviews/folderviews (if needed)
-    all_centers = fetch_all_projects(syn)
 
+    #Fetch & Filter Projects
+    all_centers = fetch_all_projects(syn)
     if all_centers.empty or "name" not in all_centers.columns:
         raise RuntimeError("Synapse /projects returned no results or missing expected fields.")
 
-    phase2_centers = all_centers[safe_contains(all_centers["name"], r"(HTAN2_)")]
-    phase2_centers = phase2_centers[~safe_contains(phase2_centers["name"], r"(HTAN2_BQDEVPROJECT)")].copy()
+    phase2_centers = all_centers[
+        all_centers["name"].fillna("").str.contains(r"HTAN2_", case=False) &
+        ~all_centers["name"].fillna("").str.contains(EXCLUDED_PROJECTS_REGEX, case=False, regex=True)
+    ].copy()
 
-    phase2_centers = phase2_centers.rename(
-        columns={
-            "name": "HTAN_Center",
-            "id": "Project_EntityId",
-            "lastActivity": "Last_Activity",
-            "modifiedOn": "Modified_On",
-            "modifiedBy": "Modified_By",
-        }
-    )
+    phase2_centers = phase2_centers.rename(columns={
+        "name": "HTAN_Center",
+        "id": "Project_EntityId",
+        "lastActivity": "Last_Activity",
+        "modifiedOn": "Modified_On",
+        "modifiedBy": "Modified_By",
+    })
 
-    phase2_centers["Folderview_EntityId"] = None
-    phase2_centers["Fileview_EntityId"] = None
-
+    #Attach Views & Fetch Item Counts
     for i, row in phase2_centers.iterrows():
-        project_id = str(row["Project_EntityId"])
-        project_name = str(row["HTAN_Center"])
+        project_id, project_name = str(row["Project_EntityId"]), str(row["HTAN_Center"])
+        phase2_centers.at[i, "Folderview_EntityId"] = ensure_entity_view(syn, project_id, project_name, EntityViewType.FOLDER, HTAN_DEV)
+        phase2_centers.at[i, "Fileview_EntityId"] = ensure_entity_view(syn, project_id, project_name, EntityViewType.FILE, HTAN_DEV)
 
-        folder_view_id = ensure_entity_view(
-            syn=syn,
-            project_id=project_id,
-            project_name=project_name,
-            entity_type=EntityViewType.FOLDER,
-            parent_id=HTAN_DEV,
-            add_annotation_columns=False,
-        )
-
-        file_view_id = ensure_entity_view(
-            syn=syn,
-            project_id=project_id,
-            project_name=project_name,
-            entity_type=EntityViewType.FILE,
-            parent_id=HTAN_DEV,
-            add_annotation_columns=False,
-        )
-
-        phase2_centers.at[i, "Folderview_EntityId"] = folder_view_id
-        phase2_centers.at[i, "Fileview_EntityId"] = file_view_id
-
-    phase2_centers["Current_Total_Files"] = phase2_centers["Fileview_EntityId"].apply(
-        lambda v: count_view_rows(syn, v, "FileView")
-    )
-    phase2_centers["Current_Total_Folders"] = phase2_centers["Folderview_EntityId"].apply(
-        lambda v: count_view_rows(syn, v, "FolderView")
-    )
+    phase2_centers["Current_Total_Files"] = phase2_centers["Fileview_EntityId"].apply(lambda v: count_view_rows(syn, v, "FileView"))
+    phase2_centers["Current_Total_Folders"] = phase2_centers["Folderview_EntityId"].apply(lambda v: count_view_rows(syn, v, "FolderView"))
 
     contacts_df = load_center_liaisons()
     if not contacts_df.empty and "HTAN_Center" in contacts_df.columns:
         phase2_centers = phase2_centers.merge(contacts_df, on="HTAN_Center", how="left")
-        
-    #Load BQ Table----------------------------------------------------------------------------------------
-    load_bq(
-        client,
-        HTAN_BQ_PROJECT,
-        MEDALLION_LAYER,
-        "raw_INDEXING_TABLE_All_Source_Phase2_Centers",
-        phase2_centers,
-    )
-    
-    # Construct ALL file view table ----------------------------------------------------------------------------------------  
-    big_fileview_df = collect_all_fileviews(syn, phase2_centers, view_col="Fileview_EntityId")
-    
-    rename_map = {
-        "id": "File_EntityId",
-        "parentId": "Folder_EntityId",
-        "projectId": "Synapse_Project_EntityId",
-        "benefactorId": "Benefactor_EntityId",
-        "description": "Description",
-        "type": "Entity_Type",
-        "path": "Path",
-        "createdOn": "Created_On",
-        "createdBy": "Created_By",
-        "modifiedOn": "Modified_On",
-        "modifiedBy": "Modified_By",
-        "etag": "Etag",
-        "currentVersion": "Current_Version",
-        "dataFileHandleId": "File_Handle_Id",
-        "dataFileName": "File_Name",
-        "dataFileSizeBytes": "File_Size_Bytes",
-        "dataFileMD5Hex": "File_MD5",
-        "dataFileConcreteType": "File_Handle_Type",
-        "dataFileBucket": "S3_Bucket",
-        "dataFileKey": "S3_Key",
-        "source_fileview": "Source_Fileview",
-        "Is_Valid": "Is_Valid",
-        "Validation_Error_Message": "Validation_Error_Message",
-        "All_Validation_Error_Messages": "All_Validation_Error_Messages",
-        "Validated_On": "Validated_On",
-    }
-    
-    if not big_fileview_df.empty:
-        big_fileview_df = big_fileview_df.rename(columns=rename_map)
-        
-        
-    #Schema Binding folder check----------------------------------------------------------------------------------------
-    results: List[Dict[str, Any]] = []
-    error_results: List[Dict[str, Any]] = []
 
+    load_bq(client, HTAN_BQ_PROJECT, MEDALLION_LAYER, "raw_INDEXING_TABLE_All_Source_Phase2_Centers", phase2_centers)
+
+    #Collect File Views
+    big_fileview_df = collect_all_fileviews(syn, phase2_centers, view_col="Fileview_EntityId")
+    big_fileview_df = big_fileview_df.rename(columns={
+        "id": "File_EntityId", "parentId": "Folder_EntityId", "projectId": "Synapse_Project_EntityId",
+        "benefactorId": "Benefactor_EntityId", "description": "Description", "type": "Entity_Type",
+        "path": "Path", "createdOn": "Created_On", "createdBy": "Created_By", "modifiedOn": "Modified_On",
+        "modifiedBy": "Modified_By", "etag": "Etag", "currentVersion": "Current_Version",
+        "dataFileHandleId": "File_Handle_Id", "dataFileName": "File_Name", "dataFileSizeBytes": "File_Size_Bytes",
+        "dataFileMD5Hex": "File_MD5", "dataFileConcreteType": "File_Handle_Type", "dataFileBucket": "S3_Bucket",
+        "dataFileKey": "S3_Key", "source_fileview": "Source_Fileview",
+    })
+
+    #Folder Schema Processing (Parallelized)
+    folder_items_to_check = []
     for _, row in phase2_centers.iterrows():
         folder_view_id = row.get("Folderview_EntityId")
         if not folder_view_id or pd.isna(folder_view_id):
             continue
 
-        project_name = str(row.get("HTAN_Center", ""))
-        project_id = str(row.get("Project_EntityId", ""))
-
+        project_name, project_id = str(row.get("HTAN_Center", "")), str(row.get("Project_EntityId", ""))
         try:
             folder_df = syn.tableQuery(f"SELECT * FROM {folder_view_id}").asDataFrame()
         except Exception as e:
@@ -422,223 +276,129 @@ def main() -> None:
 
         if "path" in folder_df.columns:
             folder_df["status_folder"] = folder_df["path"].apply(
-                lambda p: p.split("/")[1]
-                if isinstance(p, str) and project_name and p.startswith(f"{project_name}/")
-                else None
+                lambda p: p.split("/")[1] if isinstance(p, str) and project_name and p.startswith(f"{project_name}/") else None
             )
         else:
             folder_df["status_folder"] = None
 
         for _, folder_row in folder_df.iterrows():
             folder_id = str(folder_row.get("id", ""))
-            folder_name = folder_row.get("name", None)
-            folder_status = folder_row.get("status_folder", None)
+            if folder_id:
+                folder_items_to_check.append({
+                    "HTAN_Center": project_name,
+                    "Project_EntityId": project_id,
+                    "Folder_EntityId": folder_id,
+                    "Folder_Name": folder_row.get("name"),
+                    "Status_Folder_Name": folder_row.get("status_folder"),
+                })
 
-            if not folder_id:
-                continue
-
-            try:
-                binding = syn_rest_get(syn, f"/entity/{folder_id}/schema/binding")
-                schema_info = binding.get("jsonSchemaVersionInfo", {}) or {}
-                schema_short_id = schema_info.get("$id") or ""
-
-                results.append(
-                    {
-                        "HTAN_Center": project_name,
-                        "Project_EntityId": project_id,
-                        "Folder_EntityId": folder_id,
-                        "Folder_Name": folder_name,
-                        "Status_Folder_Name": folder_status,
-                        "Bound_Schema_Name": schema_short_id,
-                    }
-                )
-
-            except Exception as e:
-                error_results.append(
-                    {
-                        "HTAN_Center": project_name,
-                        "Project_EntityId": project_id,
-                        "Folder_EntityId": folder_id,
-                        "Folder_Name": folder_name,
-                        "Status_Folder_Name": folder_status,
-                        "Error": str(e),
-                    }
-                )
+    results, error_results = [], []
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = [executor.submit(fetch_folder_schema, syn, item) for item in folder_items_to_check]
+        for future in as_completed(futures):
+            res = future.result()
+            if res.pop("is_error", False):
+                error_results.append(res)
+            else:
+                results.append(res)
 
     schema_status_df = pd.DataFrame(results)
     schema_errors_df = pd.DataFrame(error_results)
 
-    #Add the Component using the schema----------------------------------------------------------------------------------------
+    #Schema Normalization
     if not schema_status_df.empty and "Bound_Schema_Name" in schema_status_df.columns:
         parts = schema_status_df["Bound_Schema_Name"].fillna("").astype(str).str.split("-", n=2, expand=True)
         schema_status_df["Component"] = parts[1] if parts.shape[1] > 1 else None
 
         schema_status_df["Component"] = schema_status_df["Component"].apply(
-            lambda c: (
-                [f"{m.group(1)}{d}" for d in m.group(2)]
-                if (isinstance(c, str) and (m := re.match(r"^(.*?)(\d+)$", c)))
-                else [c]
-            )
+            lambda c: [f"{m.group(1)}{d}" for d in m.group(2)] if (isinstance(c, str) and (m := re.match(r"^(.*?)(\d+)$", c))) else [c]
         )
-        #Manage some Component inconsistencies----------------------------------------------------------------------------------------
         schema_status_df["Schema_Version"] = schema_status_df["Bound_Schema_Name"].str.extract(r"(\d+\.\d+\.\d+)$")
-
         schema_status_df = schema_status_df.explode("Component").reset_index(drop=True)
 
-        schema_status_df["Component"] = schema_status_df["Component"].astype(str).str.replace(
-            "BiospecimenData", "Biospecimen", regex=False
-        )
-        schema_status_df["Component"] = schema_status_df["Component"].astype(str).str.replace(
-            "DigitalPathologyData", "DigitalPathology", regex=False
-        )
-
-        fileview_lookup = phase2_centers.set_index("HTAN_Center")["Fileview_EntityId"].to_dict()
-        schema_status_df["Fileview_EntityId"] = schema_status_df["HTAN_Center"].map(fileview_lookup)
-
-        schema_status_df["Folder_File_Count"] = schema_status_df.apply(
-            lambda r: count_files_via_fileview(syn, r.get("Fileview_EntityId"), r.get("Folder_EntityId")),
-            axis=1,
-        )
+        #Standardize Component Names
+        replace_map = {"BiospecimenData": "Biospecimen", "DigitalPathologyData": "DigitalPathology"}
+        schema_status_df["Component"] = schema_status_df["Component"].replace(replace_map)
 
         Component = schema_status_df[["Folder_EntityId", "Component"]].drop_duplicates()
     else:
         Component = pd.DataFrame(columns=["Folder_EntityId", "Component"])
-    
-    #Remove testing data from all folders even without bound schemas
-    schema_status_df = schema_status_df[schema_status_df['HTAN_Center'] != 'htan2-testing1']
-    #Load BQ Table----------------------------------------------------------------------------------------
-    load_bq(
-        client,
-        HTAN_BQ_PROJECT,
-        MEDALLION_LAYER,
-        "raw_INDEXING_TABLE_All_Folders_With_Bound_Schemas",
-        schema_status_df)
-    
-    #Load BQ Table----------------------------------------------------------------------------------------
-    load_bq(
-        client,
-        HTAN_BQ_PROJECT,
-        MEDALLION_LAYER,
-        "raw_INDEXING_TABLE_All_Folders_Without_Bound_Schemas",
-        schema_errors_df)
-    
-    #Include folder schema information in file validation table--------------------------------------------
-    subset_schema_status_df = schema_status_df[["Folder_EntityId", "Status_Folder_Name", "Component", "Bound_Schema_Name", "Schema_Version"]]
 
-    big_fileview_df = big_fileview_df.merge(subset_schema_status_df, on="Folder_EntityId", how="inner")
-    
-    #Load BQ Table----------------------------------------------------------------------------------------
-    load_bq(
-        client,
-        HTAN_BQ_PROJECT,
-        MEDALLION_LAYER,
-        "raw_INDEXING_TABLE_All_Files_With_Validation_Status",
-        big_fileview_df)
-    
-    #Create and push annotation fileviews and Record Sets based on config provided Sage Bionetworks (Aditi Gopalan)-------------------------------------------------------------
-    config_text = http_get_text(SCHEMA_BINDING_CONFIG_URL)
-    config = yaml.safe_load(config_text) or {}
+    load_bq(client, HTAN_BQ_PROJECT, MEDALLION_LAYER, "raw_INDEXING_TABLE_All_Folders_With_Bound_Schemas", schema_status_df)
+    load_bq(client, HTAN_BQ_PROJECT, MEDALLION_LAYER, "raw_INDEXING_TABLE_All_Folders_Without_Bound_Schemas", schema_errors_df)
 
-    file_schema_bindings = (config.get("schema_bindings", {}) or {}).get("file_based", {}) or {}
-    record_schema_bindings = (config.get("schema_bindings", {}) or {}).get("record_based", {}) or {}
-    
-    #Load record sets and validation information-------------------------------------------------------------------
-    files = data_frames_from_config(file_schema_bindings)
+    #Merge & Push Validation Files
+    if not big_fileview_df.empty and not schema_status_df.empty:
+        subset_schema_status_df = schema_status_df[["Folder_EntityId", "Status_Folder_Name", "Component", "Bound_Schema_Name", "Schema_Version"]].drop_duplicates()
+        big_fileview_df = big_fileview_df.merge(subset_schema_status_df, on="Folder_EntityId", how="inner")
+
+    load_bq(client, HTAN_BQ_PROJECT, MEDALLION_LAYER, "raw_INDEXING_TABLE_All_Files_With_Validation_Status", big_fileview_df)
+
+    #YAML Config Schemas
+    config = yaml.safe_load(http_get_text(SCHEMA_BINDING_CONFIG_URL)) or {}
+    file_bindings = (config.get("schema_bindings", {}) or {}).get("file_based", {}) or {}
+    record_bindings = (config.get("schema_bindings", {}) or {}).get("record_based", {}) or {}
+
+    #File Schemas
+    files = data_frames_from_config(file_bindings)
     if not files.empty:
         files = files[files["HTAN_Center"].isin(phase2_centers["HTAN_Center"])].copy()
         split_cols = files["Folder_Source_Path"].fillna("").astype(str).str.split("/", expand=True)
-        while split_cols.shape[1] < 4:
-            split_cols[split_cols.shape[1]] = None
-        files[["Status_Folder_Name", "SubFolder_Layer1", "SubFolder_Layer2", "SubFolder_Layer3"]] = split_cols.iloc[:, :4]
+        for col_idx in range(4):
+            files[f"SubFolder_Layer{col_idx}"] = split_cols[col_idx] if col_idx < split_cols.shape[1] else None
+        files = files.rename(columns={"SubFolder_Layer0": "Status_Folder_Name"})
         files = files.merge(Component, on="Folder_EntityId", how="left")
-        #Remove testing folders
-        files = files[files['HTAN_Center'] != 'htan2-testing1']
-    
-        #Load BQ Table----------------------------------------------------------------------------------------
-        load_bq(
-            client,
-            HTAN_BQ_PROJECT,
-            MEDALLION_LAYER,
-            "raw_INDEXING_TABLE_All_Files_Annotation_Fileview_Source",
-            files)
+        load_bq(client, HTAN_BQ_PROJECT, MEDALLION_LAYER, "raw_INDEXING_TABLE_All_Files_Annotation_Fileview_Source", files)
 
-    #Load record sets and validation information----------------------------------------------------------------------------------------
-    records = data_frames_from_config(record_schema_bindings)
-    
+    # Record Schemas
+    records = data_frames_from_config(record_bindings)
     if not records.empty:
         records = records[records["HTAN_Center"].isin(phase2_centers["HTAN_Center"])].copy()
         split_cols = records["Folder_Source_Path"].fillna("").astype(str).str.split("/", expand=True)
-        while split_cols.shape[1] < 3:
-            split_cols[split_cols.shape[1]] = None
-        records[["Status_Folder_Name", "SubFolder_Layer1", "SubFolder_Layer2"]] = split_cols.iloc[:, :3]
+        for col_idx in range(3):
+            records[f"SubFolder_Layer{col_idx}"] = split_cols[col_idx] if col_idx < split_cols.shape[1] else None
+        records = records.rename(columns={"SubFolder_Layer0": "Status_Folder_Name", "Annotation_EntityId": "Record_EntityId"})
         records = records.merge(Component, on="Folder_EntityId", how="left")
-        records.rename(columns={"Annotation_EntityId": "Record_EntityId"}, inplace=True)
-        #Remove testing folders
-        records = records[records['HTAN_Center'] != 'htan2-testing1']
-   
-        #Load BQ Table----------------------------------------------------------------------------------------
-        load_bq(
-            client,
-            HTAN_BQ_PROJECT,
-            MEDALLION_LAYER,
-            "raw_INDEXING_TABLE_All_Records_Annotation_Source",
-            records)
-        
-        #Add more information to the same table and push as another table with similar but distinct information
-        records["Number_Valid_Rows"] = None
-        records["Total_Rows"] = None
-        records["Manifest_Percent_Valid"] = None
-        records["Manifest_Version"] = None
-        records["Modified_On"] = None
-        
-        for idx, row in records.iterrows():
-            record_set_id = row.get("Record_EntityId")
-        
-            if pd.isna(record_set_id):
-                continue
-        
+
+        load_bq(client, HTAN_BQ_PROJECT, MEDALLION_LAYER, "raw_INDEXING_TABLE_All_Records_Annotation_Source", records)
+
+        # Record Validation Worker Function
+        def fetch_record_details(record_id: str) -> Dict[str, Any]:
+            if pd.isna(record_id):
+                return {}
             try:
-                rs = syn.get(record_set_id, downloadFile=False)
-                version = rs.get("versionLabel")
-                date_modified = rs.get("modifiedOn")
-                validation_summary = getattr(rs, "validationSummary", None) or {}
-        
-                number_valid = validation_summary.get("numberOfValidChildren")
-                total_rows = validation_summary.get("totalNumberOfChildren")
-        
-                records.at[idx, "Number_Valid_Rows"] = number_valid
-                records.at[idx, "Total_Rows"] = total_rows
-                records.at[idx, "Version_Label"] = version
-                records.at[idx, "Modified_On"] = date_modified
-        
-                if pd.notna(total_rows) and total_rows != 0 and pd.notna(number_valid):
-                    records.at[idx, "Manifest_Percent_Valid"] = (number_valid / total_rows) * 100
-        
+                rs = syn.get(record_id, downloadFile=False)
+                summary = getattr(rs, "validationSummary", None) or {}
+                valid_num = summary.get("numberOfValidChildren")
+                total_num = summary.get("totalNumberOfChildren")
+                pct_valid = (valid_num / total_num * 100) if (total_num and valid_num is not None) else None
+                return {
+                    "Number_Valid_Rows": valid_num,
+                    "Total_Rows": total_num,
+                    "Version_Label": rs.get("versionLabel"),
+                    "Modified_On": rs.get("modifiedOn"),
+                    "Manifest_Percent_Valid": pct_valid,
+                }
             except Exception as e:
-                print(f"Failed {record_set_id}: {e}")
-        
-        record_subset_schema_status_df = schema_status_df[["Folder_EntityId","Bound_Schema_Name", "Schema_Version"]]
-        records = records.merge(record_subset_schema_status_df, on="Folder_EntityId", how="left")
-        
-        #Load BQ Table----------------------------------------------------------------------------------------
-        load_bq(
-            client,
-            HTAN_BQ_PROJECT,
-            MEDALLION_LAYER,
-            "raw_INDEXING_TABLE_All_RecordSets_With_Validation_Status",
-            records)
-        
-        #EXCEPTION TABLE FOR RELEASE----------------------------------------------------------------------------------------
-        url = "https://docs.google.com/spreadsheets/d/1Gidm_ecocokvPQCw9Laz0ITB9FvIxd-v6-CIjyjtKz0/export?format=csv&gid=0"
-        # Skip the header lines in the doc.
-        bypass_table = pd.read_csv(url, skiprows=5)
-        #Load to BQ
-        load_bq(
-            client,
-            HTAN_BQ_PROJECT,
-            MEDALLION_LAYER,
-            "raw_INDEXING_TABLE_All_Bypass_Validation_Table",
-            bypass_table)
+                log.warning("Failed record download %s: %s", record_id, e)
+                return {}
+
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            record_details = list(executor.map(fetch_record_details, records["Record_EntityId"].tolist()))
+
+        details_df = pd.DataFrame(record_details)
+        records = pd.concat([records.reset_index(drop=True), details_df.reset_index(drop=True)], axis=1)
+
+        if not schema_status_df.empty:
+            record_subset_schema_status_df = schema_status_df[["Folder_EntityId", "Bound_Schema_Name", "Schema_Version"]].drop_duplicates()
+            records = records.merge(record_subset_schema_status_df, on="Folder_EntityId", how="left")
+
+        load_bq(client, HTAN_BQ_PROJECT, MEDALLION_LAYER, "raw_INDEXING_TABLE_All_RecordSets_With_Validation_Status", records)
+
+    #Load Bypass Table
+    bypass_url = "https://docs.google.com/spreadsheets/d/1Gidm_ecocokvPQCw9Laz0ITB9FvIxd-v6-CIjyjtKz0/export?format=csv&gid=0"
+    bypass_table = pd.read_csv(bypass_url, skiprows=5)
+    load_bq(client, HTAN_BQ_PROJECT, MEDALLION_LAYER, "raw_INDEXING_TABLE_All_Bypass_Validation_Table", bypass_table)
 
 if __name__ == "__main__":
     main()
