@@ -65,6 +65,8 @@ For the complete standard operating procedure (SOP) for releasing HTAN data, ple
 │   │   │   ├── versions.tf
 │   │   ├── bronze2silver/
 │   │   │   ├── [Google Cloud Run Job scripts and file format]
+│   │   ├── gold2mapping/
+│   │   │   ├── [Google Cloud Run Job scripts and file format]
 │   │   ├── linkml2bigquery/
 │   │   │   ├── [Google Cloud Run Job scripts and file format]
 │   │   ├── raw2bronze/
