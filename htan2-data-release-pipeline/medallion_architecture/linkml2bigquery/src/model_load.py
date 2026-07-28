@@ -24,12 +24,10 @@ Modified By:  Yamina Katariya <ykatariy@systemsbiology.org>
 import requests
 import re
 import os
-import base64
 import json
 import time
 import jwt
 import pandas as pd
-
 
 #####################################################
 #                GITHUB CONFIGURATION
@@ -168,15 +166,12 @@ def download_model(folder):
 
     # Iterate through files in the version directory
     for item in response.json():
-        if item["type"] == "file":
+        if item["type"] != "file":
+            continue
 
-            file_response = session.get(item["url"])
-            file_response.raise_for_status()
-            file_json = file_response.json()
-
-            # Github API returns content as base64 encoded string
-            content = base64.b64decode(file_json["content"]).decode("utf-8")
-            attributes[item["name"]] = json.loads(content)
+        raw = session.get(item["download_url"])
+        raw.raise_for_status()
+        attributes[item["name"]] = raw.json()
 
     return attributes
 
