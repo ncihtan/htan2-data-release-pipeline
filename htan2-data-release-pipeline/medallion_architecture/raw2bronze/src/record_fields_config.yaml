@@ -78,3 +78,10 @@ fields_by_component:
     - Record_EntityId
     - HTAN_Center
     - Component
+
+  MolecularAssignment:
+    - HTAN_DATA_FILE_ID
+    - CHANNEL_INDEX
+    - Record_EntityId
+    - HTAN_Center
+    - Component
