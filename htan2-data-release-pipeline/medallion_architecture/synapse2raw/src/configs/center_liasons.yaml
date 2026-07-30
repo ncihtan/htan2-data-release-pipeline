@@ -27,17 +27,17 @@ htan_centers:
   - HTAN_Center: HTAN2_Ovarian
     HTAN_Atlas: 3D Spatial Multi-Omics Profiling of Ovarian Cancer
     Data_Wrangler: Sammy Ferri-Borgogno
-    DCC_Liaison: Jennifer Altreuter
+    DCC_Liaison: Robert Gentleman and Alex Lash
 
   - HTAN_Center: HTAN2_Gastric
     HTAN_Atlas: Center for Gastric Pre-Cancer HTAN_Atlas of Multidimensional Evolution in 3D (GAME3D)
     Data_Wrangler: Guangsheng Pei, Jean Clemenceau
-    DCC_Liaison: Jennifer Altreuter
+    DCC_Liaison: Robert Gentleman and Alex Lash
 
   - HTAN_Center: HTAN2_Myeloma
     HTAN_Atlas: Myeloma multidimensional precancer HTAN_Atlas
     Data_Wrangler: David Cordas dos Santos
-    DCC_Liaison: Jennifer Altreuter
+    DCC_Liaison: Robert Gentleman and Alex Lash
 
   - HTAN_Center: HTAN2_Pancreatic
     HTAN_Atlas: An HTAN_Atlas of pancreatic tumorigenesis in the context of altered DNA repair occurring in high-risk individuals
