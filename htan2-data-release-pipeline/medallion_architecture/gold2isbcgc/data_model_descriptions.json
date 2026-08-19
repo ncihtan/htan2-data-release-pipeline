@@ -1,0 +1,42 @@
+[
+    {
+        "name": "Component",
+        "type": "STRING",
+        "description": "Data model component to which the attribute belongs."
+    },
+    {
+        "name": "Attribute",
+        "type": "STRING",
+        "description": "Name of the data model attribute."
+    },
+    {
+        "name": "Description",
+        "type": "STRING",
+        "description": "Description of the data model attribute."
+    },
+    {
+        "name": "Required",
+        "type": "STRING",
+        "description": "Indicates whether the attribute is required."
+    },
+    {
+        "name": "Conditional_If",
+        "type": "STRING",
+        "description": "Condition under which the attribute is required."
+    },
+    {
+        "name": "Type",
+        "type": "STRING",
+        "description": "Data type of the attribute."
+    },
+    {
+        "name": "Valid_Values",
+        "type": "STRING",
+        "description": "Permitted values for the attribute, when applicable."
+    },
+    {
+        "name": "Schema_Version",
+        "type": "STRING",
+        "description": "Version of the HTAN2 data model schema in which the attribute is defined."
+    }
+]

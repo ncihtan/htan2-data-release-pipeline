@@ -1,0 +1,57 @@
+[
+    {
+        "name": "BQ_Hash_ID",
+        "type": "STRING",
+        "description": "Hash-based identifier used to uniquely identify the metadata record in BigQuery."
+    },
+    {
+        "name": "File_EntityId",
+        "type": "STRING",
+        "description": "Synapse ID of file entity."
+    },
+    {
+        "name": "Project_EntityId",
+        "type": "STRING",
+        "description": "Synapse ID of the HTAN Project."
+    },
+    {
+        "name": "File_Size_Bytes",
+        "type": "STRING",
+        "description": "Size of the file in bytes."
+    },
+    {
+        "name": "File_MD5",
+        "type": "STRING",
+        "description": "MD5 checksum of the file contents."
+    },
+    {
+        "name": "HTAN_Center",
+        "type": "STRING",
+        "description": "Name of the participating HTAN Center."
+    },
+    {
+        "name": "Folder_EntityId",
+        "type": "STRING",
+        "description": "Synapse ID of the folder the entity resides in."
+    },
+    {
+        "name": "Status_Folder_Name",
+        "type": "STRING",
+        "description": "HTAN2 release tag."
+    },
+    {
+        "name": "Component",
+        "type": "STRING",
+        "description": "The metadata component or assay type that the record describes (e.g., Diagnosis, Biospecimen, scRNALevel1, etc.)."
+    },
+    {
+        "name": "Record_EntityId",
+        "type": "STRING",
+        "description": "Synapse ID of the record set containing the current record."
+    },
+    {
+        "name": "BQ_Hash_Record_ID",
+        "type": "STRING",
+        "description": "Hash-based identifier used to uniquely identify a record in a Synapse Record Set."
+    }
+]
