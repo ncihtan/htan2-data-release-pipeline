@@ -1,0 +1,32 @@
+[
+    {
+        "name": "File_Name",
+        "type": "STRING",
+        "description": "Name of the file."
+    },
+    {
+        "name": "Full_Provenance_Chain",
+        "type": "STRING",
+        "description": "Full provenance chain of biospecimen IDs, each link separated by a pointer (-->)."
+    },
+    {
+        "name": "Depth_Prov_Chain",
+        "type": "STRING",
+        "description": "Number of provenance relationships traversed from the assayed biospecimen to its originating source."
+    },
+    {
+        "name": "HTAN_ASSAYED_BIOSPECIMEN_ID",
+        "type": "STRING",
+        "description": "HTAN Biospecimen ID of the biospecimen directly assayed using the experimental platform."
+    },
+    {
+        "name": "HTAN_ORIGINATING_BIOSPECIMEN_ID",
+        "type": "STRING",
+        "description": "HTAN Biospecimen ID of the biopsied or resected biospecimen from the patient from which the assay data were derived."
+    },
+    {
+        "name": "BIOSPECIMEN_PATH",
+        "type": "STRING",
+        "description": "Full Biospecimen ancestry path from HTAN_ASSAYED_BIOSPECIMEN_ID to HTAN_ORIGINATING_BIOSPECIMEN_ID as comma separated list."
+    }
+]
