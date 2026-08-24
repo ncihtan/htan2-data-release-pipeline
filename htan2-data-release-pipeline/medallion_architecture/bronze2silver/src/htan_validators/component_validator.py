@@ -37,12 +37,19 @@ following checks on component-specific metadata tables:
         Tabular file formats include and must be >100 Bytes:
         ["csv", "tsv", "txt"]
         No file can be 0 bytes.
+        
+    7. **Verify HTAN Identifiers against authorized center prefixes.
+    Checks HTAN ID columns to ensure prefixes match valid center codes listed in projects.yaml.
+    Targeted columns include:
+        - All columns containing "HTAN" and "ID" (e.g., HTAN_Participant_ID, HTAN_Originating_Biospecimen_ID) Validation rules:
+        - Non-empty HTAN IDs must start with an approved center prefix matching the specified search_term.
+        - Identifiers with missing, mismatched, or unauthorized prefixes will trigger an INVALID_HTAN_ID_PREFIX warning.
  
 """
 import re
 import pandas as pd
 import numpy as np
-
+import yaml
 from htan_validators.base_validator import BaseValidator
 
 class HTANComponentValidator(BaseValidator):
@@ -436,6 +443,72 @@ class HTANComponentValidator(BaseValidator):
 
         return df
 
+
+
+    def htan_id_verify(self, df: pd.DataFrame, center_col: str = "HTAN_Center") -> pd.DataFrame:
+        """
+        Verifies that HTAN Identifiers in each row begin with the exact prefix 
+        mapped to that row's HTAN_Center in projects.yaml.
+    
+        Args:
+            df (pandas.DataFrame): Component-level metadata table.
+            center_col (str): Column name containing the HTAN center identifier.
+    
+        Returns:
+            df (pandas.DataFrame): Component-level metadata table.
+        """
+        if center_col not in df.columns:
+            return df
+    
+        with open("projects.yaml", "r") as file:
+            data = yaml.safe_load(file)
+    
+        projects = data.get("projects", [])
+    
+        # Find all HTAN ID columns in df (excluding the HTAN_Center column itself)
+        htan_id_cols = [
+            col for col in df.columns 
+            if "HTAN" in col and "ID" in col and col != center_col
+        ]
+    
+        if not htan_id_cols:
+            return df
+    
+        # Group rows by HTAN_Center value
+        for center_val, group in df.groupby(center_col):
+            if pd.isna(center_val) or not str(center_val).strip():
+                continue
+    
+            query = str(center_val).strip().lower()
+    
+            # Strict match: match ONLY df HTAN_Center with yaml HTAN_Center
+            valid_prefixes = tuple(
+                str(entry["prefix"]).strip().lower()
+                for entry in projects
+                if "prefix" in entry and query == str(entry.get("HTAN_Center", "")).strip().lower()
+            )
+    
+            if not valid_prefixes:
+                continue
+    
+            # Check all HTAN ID columns for non-matching prefixes
+            for col in htan_id_cols:
+                col_series = group[col].fillna("").astype(str).str.lower().str.strip()
+                invalid_mask = (col_series != "") & (~col_series.str.startswith(valid_prefixes))
+    
+                for idx in group[invalid_mask].index:
+                    expected_prefix = ", ".join(valid_prefixes).upper()
+                    self.append_error(
+                        df,
+                        idx,
+                        error_type="INVALID_HTAN_ID_PREFIX",
+                        message=f"ID '{df.at[idx, col]}' in column '{col}' does not start with expected prefix '{expected_prefix}' for center '{center_val}'."
+                    )
+    
+        return df
+
+
+
     def validate(self, df, syn, client, metadata_type, component, exclusion_list):
         """
         Main entry point to run all relevant validation checks on 
@@ -490,8 +563,12 @@ class HTANComponentValidator(BaseValidator):
             # Cross-reference exclusion list (#5)
             if metadata_type == "Files":
                 df = self.check_excluded_files(df, exclusion_list)
-            # Check to see if the file size is suspicious
+                
+            # Check to see if the file size is suspicious (#6)
             if metadata_type == "Files" and component != "SpatialLevel3":
                 df = self.check_file_size(df)
+            
+            # Check that reported HTAN ID contains the correct center (#7)
+            df = self.htan_id_verify(df, center_col="HTAN_Center")            
 
         return df
