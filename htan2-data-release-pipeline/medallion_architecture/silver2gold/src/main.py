@@ -72,7 +72,19 @@ def main():
     """
     # Initialize BQ Client
     client = init_bq_client()
+    
+    print_sub_section("PULLING THE EXCLUSION LIST FOR POST-RELEASE EXCLUSIONS")
+    #---------------------------------------------------------------------------------
+    exclusion_information_query = f"""
+        SELECT *
+        FROM `{PROJECT}.{RAW_DATASET}.raw_INDEXING_TABLE_Exclusion_List_Form_Results`
+    """
+    print(exclusion_information_query)
 
+    exclusion_files = client.query(exclusion_information_query).to_dataframe()
+    
+    exclusion_files = exclusion_files.loc[exclusion_files['Status'] == "EXCLUDE"]
+    
     print_sub_section("PULLING FILE VALIDATION RESULTS IN SILVER LAYER")
     #---------------------------------------------------------------------------------
     file_validation_information = f"""
@@ -126,6 +138,7 @@ def main():
             df = df[df['File_EntityId'].isin(validated_files['File_EntityId'])]
             df = df[df['Status_Folder_Name'].str.contains('ingest|staging')]
             df = df[df['HTAN_Center'].isin(confirmed_center_list['HTAN_Center'])]
+
             if not df.empty:
                 file_slice = df[['Filename','File_EntityId', 'HTAN_Center', 'Status_Folder_Name', 'BQ_Hash_ID', 'Component']].copy()
                 collected_files_list.append(file_slice)
@@ -215,8 +228,9 @@ def main():
             df = df[df['Status_Folder_Name'].str.contains('release')]
             cols_to_drop = [col for col in df.columns if any(val_column in col for val_column in validation_columns)]
             df = df.drop(columns=cols_to_drop)
-                        
-            
+            df = df[~df['File_EntityId'].isin(exclusion_files['File_EntityId'])]
+
+        
             if not df.empty:
                 file_slice = df[['File_EntityId', 'BQ_Hash_ID']].copy()
                 released_entities.append(file_slice)
@@ -226,6 +240,10 @@ def main():
             df = df[df['Status_Folder_Name'].str.contains('release')]
             cols_to_drop = [col for col in df.columns if any(val_column in col for val_column in validation_columns)]
             df = df.drop(columns=cols_to_drop)
+            if 'HTAN_PARTICIPANT_ID' in df.columns:
+                df = df[~df['HTAN_PARTICIPANT_ID'].isin(exclusion_files['HTAN_PARTICIPANT_ID'])]
+            if 'HTAN_BIOSPECIMEN_ID' in df.columns:
+                df = df[~df['HTAN_BIOSPECIMEN_ID'].isin(exclusion_files['HTAN_ORIGINATING_BIOSPECIMEN_ID'])]
                         
             if not df.empty:
                 record_slice = df[['Record_EntityId', 'BQ_Hash_Record_ID']].copy()
