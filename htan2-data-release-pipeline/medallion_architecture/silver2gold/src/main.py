@@ -213,6 +213,7 @@ def main():
     
     released_entities = []
     released_records = []
+    removed_files_exclude_list = []
     
     #For Dropping the validation columns
     validation_columns = ['Validation', 'Error', 'Violations', 'Valid', 'Validated']
@@ -228,13 +229,67 @@ def main():
             df = df[df['Status_Folder_Name'].str.contains('release')]
             cols_to_drop = [col for col in df.columns if any(val_column in col for val_column in validation_columns)]
             df = df.drop(columns=cols_to_drop)
+            
+            if "MultiplexMicroscopyLevel2" in table_id:
+                mm_expected_panel_counts = (df.groupby("HTAN_PANEL_ID")["File_EntityId"].nunique().reset_index(name="File_Count"))
+            
+            if "SpatialLevel3" in table_id:
+                spatiaL_expected_panel_counts = (df.groupby("HTAN_PANEL_ID")["File_EntityId"].nunique().reset_index(name="File_Count"))
+            
+            
+            #Save excluding files before filtering them out below.
+            if not df.empty:
+                remove_files = df[df['File_EntityId'].isin(exclusion_files['File_EntityId'])].copy()
+                removed_files_exclude_list.append(remove_files)
+            
+            # Filter out files in the exclusion list (post-release)
             df = df[~df['File_EntityId'].isin(exclusion_files['File_EntityId'])]
-
-        
+            
             if not df.empty:
                 file_slice = df[['File_EntityId', 'BQ_Hash_ID']].copy()
                 released_entities.append(file_slice)
+        
+            for df in removed_files_exclude_list:
+                component = df['Component'].iloc[0] #Just check the first value; the whole DF should have the same component listed.
                 
+                if component == "MultiplexMicroscopyLevel2":
+                    # 1. Extract expected file counts per panel
+                    mm_expected_panel_counts
+                    # 2. Count unique excluded files per panel from your exclude list
+                    exclude_df = removed_files_exclude_list[0]
+                    excluded_panel_counts = (
+                        exclude_df.groupby('HTAN_PANEL_ID')['File_EntityId']
+                        .nunique()
+                        .reset_index(name='Excluded_File_Count')
+                    )
+                    # 3. Merge expected vs actual excluded counts
+                    mm_panel_check_df = mm_expected_panel_counts.merge(excluded_panel_counts, on='HTAN_PANEL_ID', how='left')
+                    mm_panel_check_df['Excluded_File_Count'] = mm_panel_check_df['Excluded_File_Count'].fillna(0).astype(int)
+                    
+                    # 4. Add comparison flag to see if all expected files are present in the exclude list
+                    mm_panel_check_df['Fully_Excluded'] = mm_panel_check_df['File_Count'] == mm_panel_check_df['Excluded_File_Count']
+                    
+                if component == "SpatialLevel3":
+                    # 1. Extract expected file counts per panel
+                    spatiaL_expected_panel_counts
+                    # 2. Count unique excluded files per panel from your exclude list
+                    exclude_df = removed_files_exclude_list[0]
+                    excluded_panel_counts = (
+                        exclude_df.groupby('HTAN_PANEL_ID')['File_EntityId']
+                        .nunique()
+                        .reset_index(name='Excluded_File_Count')
+                    )
+                    # 3. Merge expected vs actual excluded counts
+                    spatial_panel_check_df = spatiaL_expected_panel_counts.merge(excluded_panel_counts, on='HTAN_PANEL_ID', how='left')
+                    spatial_panel_check_df['Excluded_File_Count'] = spatial_panel_check_df['Excluded_File_Count'].fillna(0).astype(int)
+                    
+                    # 4. Add comparison flag to see if all expected files are present in the exclude list
+                    spatial_panel_check_df['Fully_Excluded'] = spatial_panel_check_df['File_Count'] == spatial_panel_check_df['Excluded_File_Count']
+                    
+                #if component == "MolecularAssignment":
+                #    molecular_panel_check = df["HTAN_DATA_FILE_ID"].unique
+        
+        
         if metadata_type == "Records":
             df = query_bigquery_table(client, PROJECT, BRONZE_DATASET, table_id)
             df = df[df['Status_Folder_Name'].str.contains('release')]
@@ -244,11 +299,20 @@ def main():
                 df = df[~df['HTAN_PARTICIPANT_ID'].isin(exclusion_files['HTAN_PARTICIPANT_ID'])]
             if 'HTAN_BIOSPECIMEN_ID' in df.columns:
                 df = df[~df['HTAN_BIOSPECIMEN_ID'].isin(exclusion_files['HTAN_ORIGINATING_BIOSPECIMEN_ID'])]
-                        
+                
+            if "ChannelMetadata" in table_id:
+                remove_panels =  mm_panel_check_df.loc[mm_panel_check_df['Fully_Excluded'] == True]
+                df = df[~df['HTAN_PANEL_ID'].isin(remove_panels['HTAN_PANEL_ID'])]
+            if "SpatialLevel3" in table_id:
+                remove_panels =  spatial_panel_check_df.loc[spatial_panel_check_df['Fully_Excluded'] == True]
+                df = df[~df['HTAN_PANEL_ID'].isin(remove_panels['HTAN_PANEL_ID'])]
+            #if "MolecularAssignment" in table_id:
+            #    df = df[~df['HTAN_DATA_FILE_ID'].isin(molecular_panel_check['HTAN_DATA_FILE_ID'])]
+            
             if not df.empty:
                 record_slice = df[['Record_EntityId', 'BQ_Hash_Record_ID']].copy()
                 released_records.append(record_slice)
-        
+            
         if df is not None:
             table_name = f"gold_RELEASED_METADATA_TABLE_All_{metadata_type}_{component}"
             load_bq(
