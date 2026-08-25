@@ -14,7 +14,7 @@ Functions:
     - print_sub_section(title)
     
 Author: Dar'ya Pozhidayeva, Yamina Katariya
-Updated: 07/1/2026
+Updated: 08/25/2026
 """
 import pandas as pd
 from client_load import (
