@@ -220,7 +220,7 @@ class HTANProvenanceValidator(BaseValidator):
 
         return df
 
-    def check_panel_data(self, df, table_id, metadata_type, client):
+    def check_panel_data(self, df, table_id, metadata_type, client, htan_id):
         """
         Validate panel ID linkage between File metadata and panel (channel) metadata.
 
@@ -262,43 +262,52 @@ class HTANProvenanceValidator(BaseValidator):
                 )
             return df
 
-
         # Check if HTAN_PANEL_ID is null for File metadata
         if metadata_type == "Files":
-            null_mask = df["HTAN_PANEL_ID"].isna()
+            null_mask = df[htan_id].isna()
 
             for idx in df[null_mask].index:
                 self.append_error(
                     df,
                     idx,
                     error_type="MISSING_PANEL",
-                    message="Panel metadata is not linked because HTAN_PANEL_ID is missing."
+                    message=f"Associated metadata is not linked because {htan_id} is missing."
                 )
 
         # Get actual IDs from metadata tables to check
-        target_ids = df['HTAN_PANEL_ID'].dropna().unique()
-        reference_ids = queried_df['HTAN_PANEL_ID'].dropna().unique()
+        target_ids = df[htan_id].dropna().unique()
+        reference_ids = queried_df[htan_id].dropna().unique()
 
         # Identify panel type (e.g., ChannelMetadata or SpatialPanel)
         panel_type = queried_df['Component'].dropna().unique()[0]
+
+        if panel_type == "MolecularAssignment":
+            dup_mask = df[htan_id].duplicated(keep=False) & df[htan_id].notna()
+            for idx in df[dup_mask].index:
+                self.append_error(
+                    df,
+                    idx,
+                    error_type="DUPLICATE_PANEL",
+                    message=f"{df.at[idx, htan_id]} is duplicated."
+                )
 
         # Check if Panel metadata linkage to files
         missing_ids = [pid for pid in target_ids if pid not in reference_ids]
         if missing_ids:
 
-            invalid_mask = df['HTAN_PANEL_ID'].isin(missing_ids)
+            invalid_mask = df[htan_id].isin(missing_ids)
             for idx in df[invalid_mask].index:
-                missing_id = df.at[idx, 'HTAN_PANEL_ID']
+                missing_id = df.at[idx, htan_id]
 
                 # Files: panel ID should have a corresponding record set
                 if metadata_type == "Files":
                     error_type = "MISSING_PANEL"
-                    message = f"HTAN Panel ID '{missing_id}' was not submitted as a {panel_type} record."
+                    message = f"'{missing_id}' was not submitted as a {panel_type} record."
 
                 # Record Sets: panel exists but is not used by any files
                 else:
                     error_type = "UNUSED_PANEL"
-                    message = f"HTAN Panel ID '{missing_id}' is not linked to any files."
+                    message = f"'{missing_id}' is not linked to any files."
 
                 self.append_error(
                     df,
@@ -306,6 +315,21 @@ class HTANProvenanceValidator(BaseValidator):
                     error_type=error_type,
                     message=message
                 )
+
+        return df
+
+    def check_excluded_panels(self, df, exclusion_list, id_prov):
+
+        # excluded_files_ingest = exclusion_list['File_EntityId'].isin
+
+        exclusion_ids = exclusion_list.merge(
+            id_prov[['File_Name', 'File_EntityId', 'HTAN_Center', 'Component']],
+            on=['File_Name', 'File_EntityId', 'HTAN_Center'],
+            how='left',
+            indicator=True
+        )
+
+        print(exclusion_ids)
 
         return df
 
@@ -368,7 +392,7 @@ class HTANProvenanceValidator(BaseValidator):
 
         return id_prov
 
-    def validate(self, client, df, id_prov, metadata_type, component):
+    def validate(self, client, df, id_prov, exclusion_list, metadata_type, component):
         """
         Execute all provenance validation checks for a given component.
 
@@ -413,6 +437,8 @@ class HTANProvenanceValidator(BaseValidator):
 
         if not df.empty:
 
+            self.check_excluded_panels(df, exclusion_list, id_prov)
+
             # Check Center-level Biospecimen and Demographics completeness (#1)
             if component in ["Biospecimen", "Demographics"]:
                 id_prov = self.check_bio_and_demo_record_per_center(df, id_prov, component)
@@ -434,32 +460,52 @@ class HTANProvenanceValidator(BaseValidator):
                     df,
                     "bronze_METADATA_TABLE_All_Records_ChannelMetadata",
                     metadata_type,
-                    client
+                    client,
+                    "HTAN_PANEL_ID"
                 )
             if component == "SpatialLevel3":
                 df = self.check_panel_data(
                     df,
                     "bronze_METADATA_TABLE_All_Records_SpatialPanel",
                     metadata_type,
-                    client
+                    client,
+                    "HTAN_PANEL_ID"
                 )
             if component == "ChannelMetadata":
                 df = self.check_panel_data(
                     df,
                     "bronze_METADATA_TABLE_All_Files_MultiplexMicroscopyLevel2",
                     metadata_type,
-                    client
+                    client,
+                    "HTAN_PANEL_ID"
                 )
             if component == "SpatialPanel":
                 df = self.check_panel_data(
                     df,
                     "bronze_METADATA_TABLE_All_Files_SpatialLevel3",
                     metadata_type,
-                    client
+                    client,
+                    "HTAN_PANEL_ID"
+                )
+            if component == "MassSpectrometryImagingLevel3":
+                df = self.check_panel_data(
+                    df,
+                    "bronze_METADATA_TABLE_All_Records_MolecularAssignment",
+                    metadata_type,
+                    client,
+                    "HTAN_DATA_FILE_ID"
+                )
+            if component == "MolecularAssignment":
+                df = self.check_panel_data(
+                    df,
+                    "bronze_METADATA_TABLE_All_Files_MassSpectrometryImagingLevel3",
+                    metadata_type,
+                    client,
+                    "HTAN_DATA_FILE_ID"
                 )
 
             # Check Participant IDs in non-Demographics tables exist in Demographics (#3)
-            if metadata_type == "Records" and component not in ["Biospecimen", "Demographics", "ChannelMetadata", "SpatialPanel"]:
+            if metadata_type == "Records" and component not in ["Biospecimen", "Demographics", "ChannelMetadata", "SpatialPanel", "MolecularAssignment"]:
                 df = self.check_participants_in_non_demographics(df, demo_df)
 
         return df, id_prov

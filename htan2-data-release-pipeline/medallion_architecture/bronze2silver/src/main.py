@@ -250,7 +250,8 @@ def main():
     """
     record_schemas = client.query(record_schema_query).to_dataframe()
 
-    #Filter out record rows for data that has already been released - wildcard should support future tables provided they have the same schema.
+    # Filter out record rows for data that has already been released
+    # - wildcard should support future tables provided they have the same schema.
     gold_archive_record_query = f"""
     SELECT *
     FROM `{PROJECT}.{GOLD_ARCHIVE_DATASET}.gold_RELEASED_INDEXING_TABLE_Released_RecordsetRows_R*`
@@ -304,6 +305,7 @@ def main():
         df, prov_error_table = prov_validator.validate(client,
                                                        df,
                                                        prov_error_table,
+                                                       exclusion_list,
                                                        metadata_type,
                                                        component)
 
@@ -323,9 +325,8 @@ def main():
                         "MISSING_HTAN_ID",
                         "DUPLICATE_HTAN_ID",
                         "INVALID_SYNAPSE_ID",
-                        "EXCLUDED_FILE",
-                        "SMALL_FILE_SIZE_WARNING",
-                        "INVALID_HTAN_ID_PREFIX"]
+                        "EXCLUDED_ENTITY",
+                        "SMALL_FILE_SIZE_WARNING"]
 
     provenance_errors = ["MISSING_CENTER_RECORD",
                          "MISSING_DEMOGRAPHICS",

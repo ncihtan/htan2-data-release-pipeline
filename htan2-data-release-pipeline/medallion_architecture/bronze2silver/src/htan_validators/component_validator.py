@@ -4,8 +4,9 @@ the BaseValidator class. The HTANComponentValidator provides the
 following checks on component-specific metadata tables:
 
     1. **Primary Key Integrity:** Verifies that required HTAN identifiers 
-    (like Data File, Biospecimen, or Participant IDs) are present (not null)
-    and unique across individual metadata tables.
+    (like Data File, Biospecimen, or Participant IDs) are present (not null),
+    unique across individual metadata tables, and match the approved HTAN
+    Center prefix.
 
     2. **Synapse ID Authenticity:** Pings the Synapse platform to ensure that
     the provided Synapse IDs actually exist and are accessible.
@@ -30,21 +31,12 @@ following checks on component-specific metadata tables:
     those submitted to the Exclusion List Request Form, and flags any files marked
     for exclusion. 
 
-    6. **Check the file size of large format files (fastq, ome-tiffs, ect.) and tabular format files.
-        A cutoff has been set for large and tabular format files. 
-        Large files include and must be > 1MB:
-        ["fastq", "bam", "ome-tiff", "tiff", "gzip"]
-        Tabular file formats include and must be >100 Bytes:
-        ["csv", "tsv", "txt"]
-        No file can be 0 bytes.
-        
-    7. **Verify HTAN Identifiers against authorized center prefixes.
-    Checks HTAN ID columns to ensure prefixes match valid center codes listed in projects.yaml.
-    Targeted columns include:
-        - All columns containing "HTAN" and "ID" (e.g., HTAN_Participant_ID, HTAN_Originating_Biospecimen_ID) Validation rules:
-        - Non-empty HTAN IDs must start with an approved center prefix matching the specified search_term.
-        - Identifiers with missing, mismatched, or unauthorized prefixes will trigger an INVALID_HTAN_ID_PREFIX warning.
- 
+    6. **File Size:** Check the file size of large format files (fastq, ome-tiffs, ect.)
+    and tabular format files. A cutoff has been set for large and tabular format files. 
+    
+        - Large files include and must be > 1MB ["fastq", "bam", "ome-tiff", "tiff", "gzip"]
+        - Tabular file formats include and must be >100 Bytes ["csv", "tsv", "txt"]
+        - No file can be 0 bytes.
 """
 import re
 import pandas as pd
@@ -201,15 +193,14 @@ class HTANComponentValidator(BaseValidator):
 
         # Assign required HTAN Id based on metadata type and component
         required_ids = []
-        if metadata_type == "Files" and component != "SpatialPanel":
+        if metadata_type == "Files" or component == "MolecularAssignment":
             required_ids = ["HTAN_DATA_FILE_ID"]
-        elif metadata_type == "Files" and component == "SpatialPanel":
-            required_ids = ["HTAN_PANEL_ID"]
-        elif metadata_type == "Files" and component == "ChannelMetadata":
+        elif metadata_type == "Records" and component in ["SpatialPanel", "ChannelMetadata"]:
             required_ids = ["HTAN_PANEL_ID"]
         elif metadata_type == "Records" and component == "Biospecimen":
             required_ids = ["HTAN_BIOSPECIMEN_ID"]
-        elif metadata_type == "Records" and component not in ["Biospecimen", "ChannelMetadata", "SpatialPanel"]:
+        elif metadata_type == "Records" and component not in \
+            ["Biospecimen", "ChannelMetadata", "SpatialPanel", "MolecularAssignment"]:
             required_ids = ["HTAN_PARTICIPANT_ID"]
 
         for col in required_ids:
@@ -227,7 +218,8 @@ class HTANComponentValidator(BaseValidator):
                     message=f"{col} is null."
                 )
 
-            #Allow the Molecular_Test Assay to have duplicated HTAN_Participant_IDs (Participants have multiple mutations/results as rows.)
+            # Allow the Molecular_Test Assay to have duplicated HTAN_Participant_IDs
+            # (Participants have multiple mutations/results as rows.)
             if col == 'HTAN_PARTICIPANT_ID' and component == 'MolecularTest':
                 continue
             else:
@@ -345,9 +337,9 @@ class HTANComponentValidator(BaseValidator):
 
         return df
 
-    def check_excluded_files(self, df, exclusion_list):
+    def check_excluded_files_part_bio(self, df, exclusion_list, metadata_type, component):
         """
-        Cross-reference files against the Exclusion List to be marked for exclusion.
+        Cross-reference entities against the Exclusion List to be marked for exclusion.
 
         Args:
             df (pandas.DataFrame):
@@ -363,24 +355,28 @@ class HTANComponentValidator(BaseValidator):
         if exclusion_list is None or exclusion_list.empty:
             return df
 
-        # Mapping: {component df col: exclusion list col}
-        comparison_cols = {
-            'File_Name': 'Filename', 
-            'File_EntityId': 'entityId',
-            'HTAN_Center': 'HTAN_Center'
-        }
+        match_on = ['HTAN_Center']
+        entity = None
 
-        # Create a temporary subset of the exclusion list with matching names for a merge
-        temp_exclusion = exclusion_list.rename(columns={
-            'Filename': 'File_Name',
-            'entityId': 'File_EntityId',
-            'HTAN_Center': 'HTAN_Center'
-        })[list(comparison_cols.keys())]
+        if metadata_type == "Files":
+            match_on += ['File_Name', 'File_EntityId']
+            entity = 'File_Name'
+        elif metadata_type == "Records" and component == "Biospecimen":
+            match_on += ['HTAN_BIOSPECIMEN_ID']
+            entity = 'HTAN_BIOSPECIMEN_ID'
+            exclusion_list = exclusion_list.rename(
+                columns={"HTAN_ORIGINATING_BIOSPECIMEN_ID": "HTAN_BIOSPECIMEN_ID"}
+            )
+        else:
+            match_on += ['HTAN_PARTICIPANT_ID']
+            entity = 'HTAN_PARTICIPANT_ID'
+
+        temp_exclusion = exclusion_list[match_on].drop_duplicates()
 
         # Find overlaps
         overlap = df.reset_index().merge(
-            temp_exclusion, 
-            on=list(comparison_cols.keys()), 
+            temp_exclusion,
+            on=match_on,
             how='inner'
         ).set_index('index')
 
@@ -388,9 +384,9 @@ class HTANComponentValidator(BaseValidator):
             self.append_error(
                 df,
                 idx,
-                error_type="EXCLUDED_FILE",
+                error_type="EXCLUDED_ENTITY",
                 message=(
-                    f"File {df.at[idx, 'File_Name']} is marked as 'EXCLUDE'."
+                    f"Entity {df.at[idx, entity]} is marked as 'EXCLUDE'."
                 )
             )
 
@@ -443,71 +439,70 @@ class HTANComponentValidator(BaseValidator):
 
         return df
 
-
-
     def htan_id_verify(self, df: pd.DataFrame, center_col: str = "HTAN_Center") -> pd.DataFrame:
         """
         Verifies that HTAN Identifiers in each row begin with the exact prefix 
         mapped to that row's HTAN_Center in projects.yaml.
     
         Args:
-            df (pandas.DataFrame): Component-level metadata table.
-            center_col (str): Column name containing the HTAN center identifier.
+            df (pandas.DataFrame): 
+                Component-level metadata table.
+
+            center_col (str): 
+                Column name containing the HTAN center identifier.
     
         Returns:
-            df (pandas.DataFrame): Component-level metadata table.
+            df (pandas.DataFrame): 
+                Component-level metadata table.
         """
         if center_col not in df.columns:
             return df
-    
-        with open("projects.yaml", "r") as file:
+
+        with open("./htan_validators/projects.yaml", "r", encoding="utf-8") as file:
             data = yaml.safe_load(file)
-    
         projects = data.get("projects", [])
-    
+
         # Find all HTAN ID columns in df (excluding the HTAN_Center column itself)
         htan_id_cols = [
-            col for col in df.columns 
+            col for col in df.columns
             if "HTAN" in col and "ID" in col and col != center_col
         ]
-    
+
         if not htan_id_cols:
             return df
-    
+
         # Group rows by HTAN_Center value
         for center_val, group in df.groupby(center_col):
             if pd.isna(center_val) or not str(center_val).strip():
                 continue
-    
+
             query = str(center_val).strip().lower()
-    
+
             # Strict match: match ONLY df HTAN_Center with yaml HTAN_Center
             valid_prefixes = tuple(
                 str(entry["prefix"]).strip().lower()
                 for entry in projects
                 if "prefix" in entry and query == str(entry.get("HTAN_Center", "")).strip().lower()
             )
-    
+
             if not valid_prefixes:
                 continue
-    
+
             # Check all HTAN ID columns for non-matching prefixes
             for col in htan_id_cols:
                 col_series = group[col].fillna("").astype(str).str.lower().str.strip()
                 invalid_mask = (col_series != "") & (~col_series.str.startswith(valid_prefixes))
-    
+
                 for idx in group[invalid_mask].index:
                     expected_prefix = ", ".join(valid_prefixes).upper()
                     self.append_error(
                         df,
                         idx,
-                        error_type="INVALID_HTAN_ID_PREFIX",
+                        error_type="INVALID_HTAN_ID",
                         message=f"ID '{df.at[idx, col]}' in column '{col}' does not start with expected prefix '{expected_prefix}' for center '{center_val}'."
                     )
-    
+
         return df
-
-
 
     def validate(self, df, syn, client, metadata_type, component, exclusion_list):
         """
@@ -561,14 +556,14 @@ class HTANComponentValidator(BaseValidator):
                 df = self.check_id_linkage(df, "ADJACENT_BIOSPECIMEN_IDS", "HTAN_BIOSPECIMEN_ID")
 
             # Cross-reference exclusion list (#5)
-            if metadata_type == "Files":
-                df = self.check_excluded_files(df, exclusion_list)
-                
+            if component not in ["SpatialPanel", "ChannelMetadata", "MolecularAssignment"]:
+                df = self.check_excluded_files_part_bio(df, exclusion_list, metadata_type, component)
+
             # Check to see if the file size is suspicious (#6)
             if metadata_type == "Files" and component != "SpatialLevel3":
                 df = self.check_file_size(df)
-            
+
             # Check that reported HTAN ID contains the correct center (#7)
-            df = self.htan_id_verify(df, center_col="HTAN_Center")            
+            df = self.htan_id_verify(df, center_col="HTAN_Center")
 
         return df
