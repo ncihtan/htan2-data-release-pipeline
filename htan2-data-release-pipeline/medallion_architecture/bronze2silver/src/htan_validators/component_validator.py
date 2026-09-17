@@ -517,14 +517,14 @@ class HTANComponentValidator(BaseValidator):
                     #Re-align mask with original group column index (True if ANY parent ID is invalid)
                     invalid_mask = invalid_items.groupby(level=0).any()
         
-                for idx in group[invalid_mask].index:
-                    expected_prefix = ", ".join(valid_prefixes)
-                    self.append_error(
-                        df,
-                        idx,
-                        error_type="INVALID_HTAN_ID",
-                        message=f"ID '{df.at[idx, col]}' in column '{col}' does not start with expected prefix '{expected_prefix}' for center '{center_val}'."
-                    )
+			for idx in group[invalid_mask].index:
+				expected_prefix = ", ".join(valid_prefixes)
+				self.append_error(
+					df,
+					idx,
+					error_type="INVALID_HTAN_ID",
+					message=f"ID '{df.at[idx, col]}' in column '{col}' does not start with expected prefix '{expected_prefix}' for center '{center_val}'."
+				)
 
         return df
 
