@@ -38,6 +38,12 @@ following checks on component-specific metadata tables:
         - Large files include and must be > 1MB ["fastq", "bam", "ome-tiff", "tiff", "gzip"]
         - Tabular file formats include and must be >100 Bytes ["csv", "tsv", "txt"]
         - No file can be 0 bytes.
+    
+    7. **Age Verification:** Ensure that ages submitted are comply with PII and data model
+    standards. Age in days must be:
+
+        - less than 32485 days (89 years old)
+        - greater than 6570 (18 years old) unless it is confirmed they are Pediatric patients
 """
 import re
 import pandas as pd
@@ -505,6 +511,57 @@ class HTANComponentValidator(BaseValidator):
 
         return df
 
+    def check_ages(self, df):
+        """
+        Flag columns pertaining to age where the age reported:
+            - is > 32485 (89 years old)
+            - is < 6570 (18 years old)
+
+        Args:
+            df (pandas.DataFrame): 
+                Component-level metadata table.
+    
+        Returns:
+            df (pandas.DataFrame): 
+                Component-level metadata table.
+        """
+
+        # Get all columns relating to age
+        age_columns = [col for col in df.columns if 'AGE_' in col]
+
+        if not age_columns:
+            return df
+
+        min_age_days = 18 * 365
+        max_age_days = 89 * 365
+        age_not_available = -1
+
+        for col in age_columns:
+
+            numeric_ages = pd.to_numeric(df[col], errors="coerce")
+
+            # Check if ages are over 89 years old (32485 days)
+            over_89 = numeric_ages > max_age_days
+            for idx in df[over_89].index:
+                self.append_error(
+                    df,
+                    idx,
+                    error_type="AGE_OVER_89",
+                    message=f"{df.at[idx, col]} in {col} is greater than 89 years old (32485 days)"
+                )
+
+            # Check ig ages are under 18 years old (6570 days)
+            under_18 = (numeric_ages < min_age_days) & (numeric_ages != age_not_available)
+            for idx in df[under_18].index:
+                self.append_error(
+                    df,
+                    idx,
+                    error_type="AGE_UNDER_18",
+                    message=f"{df.at[idx, col]} in {col} is under 18 years old (6570 days)"
+                )
+
+        return df
+
     def validate(self, df, syn, client, metadata_type, component, exclusion_list):
         """
         Main entry point to run all relevant validation checks on 
@@ -547,6 +604,9 @@ class HTANComponentValidator(BaseValidator):
                 df = self.check_synapse_id(syn, df, "File_EntityId")
             elif metadata_type == "Records":
                 df = self.check_synapse_id(syn, df, "Folder_EntityId")
+
+                # Check Ages (#7)
+                df = self.check_ages(df)
 
             # Check HTAN Parent ID format (#3)
             if (metadata_type == "Files" or component == "Biospecimen") and component != "SpatialPanel":
