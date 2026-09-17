@@ -325,7 +325,9 @@ def main():
                         "DUPLICATE_HTAN_ID",
                         "INVALID_SYNAPSE_ID",
                         "EXCLUDED_ENTITY",
-                        "SMALL_FILE_SIZE_WARNING"]
+                        "SMALL_FILE_SIZE_WARNING",
+                        "AGE_OVER_89",
+                        "AGE_UNDER_18"]
 
     provenance_errors = ["MISSING_CENTER_RECORD",
                          "MISSING_DEMOGRAPHICS",
