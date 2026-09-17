@@ -20,6 +20,7 @@ following checks on component-specific metadata tables:
         - Biospecimen Parent IDs are all existing Biospecimen or Participant IDs
         - Level 1 Sequencing and Level 2 Imaging Parent IDs are Biospecimen IDs
         - Level 2 (expect Imaging), Level 3, and Level 4 Parent IDs are Data File IDs
+        - All IDs contain their associated HTAN Center's prefix
 
     4. **Internal ID Linkage:** Ensures that IDs referenced in one column actually
     exist in the corresponding primary ID column within the same component table.
@@ -563,7 +564,7 @@ class HTANComponentValidator(BaseValidator):
             if metadata_type == "Files" and component != "SpatialLevel3":
                 df = self.check_file_size(df)
 
-            # Check that reported HTAN ID contains the correct center (#7)
+            # Check that reported HTAN ID contains the correct center (#3)
             df = self.htan_id_verify(df, center_col="HTAN_Center")
 
         return df
