@@ -20,12 +20,17 @@ following checks:
     4. **Biospecimen-to-File Linkages:** Ensures that Biospecimen IDs are
     linked to files via the provenance table.
 
-    5. **Panel-to-File Linkages:** Ensures that Panel metadata (Channel and
-    Spatial) are linked to Files and that all Panel metadata provided
-    exists in the ChannelMetadata and SpatialPanel record sets.
+    5. **Panel-to-File Linkages:** Ensures that Panel metadata (Channel,
+    Spatial, and MolecularAssignment) are linked to Files and that all Panel
+    metadata provided exists in the ChannelMetadata, SpatialPanel, and
+    MolecularAssignment record sets.
 
     6. **Data File ID Cross-Validation:** Ensures that each HTAN_DATA_FILE_ID
     is unique across all centers.
+
+    7. **Panel Exclusions:** Marks and panels (Channel, Spatial, and
+    MolecularAssignment) associated with files submitted to the Exclusion Request
+    Portal as excluded.
 """
 
 import pandas as pd
@@ -237,6 +242,9 @@ class HTANProvenanceValidator(BaseValidator):
             client (BigQuery instance):
                 BigQuery client object.
 
+            htan_id (str):
+                Panel attribute name.
+
         Returns:
             df (pandas.DataFrame):
                 Component-level metadata table.
@@ -318,18 +326,56 @@ class HTANProvenanceValidator(BaseValidator):
 
         return df
 
-    def check_excluded_panels(self, df, exclusion_list, id_prov):
+    def check_excluded_panels(self, df, client, exclusion_ids, table_id, htan_id):
+        """
+        Evaluates if panels (HTAN_DATA_FILE_ID or HTAN_PANEL_ID) are
+        excluded from the current release.
 
-        # excluded_files_ingest = exclusion_list['File_EntityId'].isin
+        Args:
+            df (pandas.DataFrame):
+                Component-level metadata table.
 
-        exclusion_ids = exclusion_list.merge(
-            id_prov[['File_Name', 'File_EntityId', 'HTAN_Center', 'Component']],
-            on=['File_Name', 'File_EntityId', 'HTAN_Center'],
-            how='left',
-            indicator=True
+            client (BigQuery instance):
+                BigQuery client object.
+
+            exclusion_ids (list):
+                List of HTAN_DATA_FILE_IDs that were
+                marked as 'EXCLUDE'.
+            
+            table_id (str):
+                BigQuery table name.
+
+            htan_id (str):
+                Panel attribute name.
+
+        Returns:
+            df (pandas.DataFrame):
+                Component-level metadata table.
+        """
+
+        file_df = self.query_bigquery_table(
+            client,
+            'htan2-dcc',
+            'htan2_medallion_bronze',
+            table_id
         )
 
-        print(exclusion_ids)
+        excluded_panels = file_df.loc[
+            file_df["HTAN_DATA_FILE_ID"].isin(exclusion_ids["HTAN_DATA_FILE_ID"]),
+            htan_id
+        ].tolist()
+
+        invalid_mask = df[htan_id].isin(excluded_panels)
+
+        for idx in df[invalid_mask].index:
+            excluded_panel = df.at[idx, htan_id]
+
+            self.append_error(
+                df,
+                idx,
+                error_type="EXCLUDED_PANEL",
+                message=f"{excluded_panel} is marked as 'EXCLUDE'."
+            )
 
         return df
 
@@ -406,6 +452,9 @@ class HTANProvenanceValidator(BaseValidator):
             id_prov (pandas.DataFrame):
                 Provenance table.
 
+            exclusion_list (pandas.DataFrame):
+                Exclusion list passed as a dataframe.
+
             metadata_type (str):
                 Metadata type (Files or Records).
 
@@ -431,13 +480,61 @@ class HTANProvenanceValidator(BaseValidator):
             "HTAN_PARTICIPANT_ID"
         )
 
+        # Get list of excluded HTAN DATA FILE IDs
+        excluded_files_ingest = exclusion_list[
+            exclusion_list["File_EntityId"].isin(id_prov["File_EntityId"])
+        ]
+
+        exclusion_ids = None
+        if not excluded_files_ingest.empty:
+            exclusion_ids = exclusion_list.merge(
+                id_prov[['File_Name', 'File_EntityId',
+                         'HTAN_Center', 'HTAN_DATA_FILE_ID', 'Component']],
+                on=['File_Name', 'File_EntityId', 'HTAN_Center'],
+                how='left',
+                indicator=True
+            )
+            exclusion_ids = exclusion_ids[exclusion_ids['Component'] == component]
+
+        # Initialize panel table couples
+        panel_checks = {
+            "MultiplexMicroscopyLevel2": (
+                "bronze_METADATA_TABLE_All_Records_ChannelMetadata",
+                "HTAN_PANEL_ID",
+                False
+            ),
+            "SpatialLevel3": (
+                "bronze_METADATA_TABLE_All_Records_SpatialPanel",
+                "HTAN_PANEL_ID",
+                False
+            ),
+            "MassSpectrometryImagingLevel3": (
+                "bronze_METADATA_TABLE_All_Records_MolecularAssignment",
+                "HTAN_DATA_FILE_ID",
+                False
+            ),
+            "ChannelMetadata": (
+                "bronze_METADATA_TABLE_All_Files_MultiplexMicroscopyLevel2",
+                "HTAN_PANEL_ID",
+                True
+            ),
+            "SpatialPanel": (
+                "bronze_METADATA_TABLE_All_Files_SpatialLevel3",
+                "HTAN_PANEL_ID",
+                True
+            ),
+            "MolecularAssignment": (
+                "bronze_METADATA_TABLE_All_Files_MassSpectrometryImagingLevel3",
+                "HTAN_DATA_FILE_ID",
+                True
+            )
+        }
+
         #######################
         # Validation Checks
         #######################
 
         if not df.empty:
-
-            self.check_excluded_panels(df, exclusion_list, id_prov)
 
             # Check Center-level Biospecimen and Demographics completeness (#1)
             if component in ["Biospecimen", "Demographics"]:
@@ -454,55 +551,15 @@ class HTANProvenanceValidator(BaseValidator):
                 # Check Data File IDs are unique across centers (#6)
                 id_prov = self.prov_cross_validation(id_prov)
 
-            # Check Panel (Channel and Spatial) Linkage to Files (#5)
-            if component == "MultiplexMicroscopyLevel2":
-                df = self.check_panel_data(
-                    df,
-                    "bronze_METADATA_TABLE_All_Records_ChannelMetadata",
-                    metadata_type,
-                    client,
-                    "HTAN_PANEL_ID"
-                )
-            if component == "SpatialLevel3":
-                df = self.check_panel_data(
-                    df,
-                    "bronze_METADATA_TABLE_All_Records_SpatialPanel",
-                    metadata_type,
-                    client,
-                    "HTAN_PANEL_ID"
-                )
-            if component == "ChannelMetadata":
-                df = self.check_panel_data(
-                    df,
-                    "bronze_METADATA_TABLE_All_Files_MultiplexMicroscopyLevel2",
-                    metadata_type,
-                    client,
-                    "HTAN_PANEL_ID"
-                )
-            if component == "SpatialPanel":
-                df = self.check_panel_data(
-                    df,
-                    "bronze_METADATA_TABLE_All_Files_SpatialLevel3",
-                    metadata_type,
-                    client,
-                    "HTAN_PANEL_ID"
-                )
-            if component == "MassSpectrometryImagingLevel3":
-                df = self.check_panel_data(
-                    df,
-                    "bronze_METADATA_TABLE_All_Records_MolecularAssignment",
-                    metadata_type,
-                    client,
-                    "HTAN_DATA_FILE_ID"
-                )
-            if component == "MolecularAssignment":
-                df = self.check_panel_data(
-                    df,
-                    "bronze_METADATA_TABLE_All_Files_MassSpectrometryImagingLevel3",
-                    metadata_type,
-                    client,
-                    "HTAN_DATA_FILE_ID"
-                )
+            if component in panel_checks:
+                table_id, htan_id, check_exclusions = panel_checks[component]
+
+                # Check Panel (Channel, Spatial, MolecularAssignment) Linkage to Files (#5)
+                df = self.check_panel_data(df, table_id, metadata_type, client, htan_id )
+
+                # Check Panel Exclusions (#7)
+                if check_exclusions and exclusion_ids is not None:
+                    df = self.check_excluded_panels( df, client, exclusion_ids, table_id, htan_id )
 
             # Check Participant IDs in non-Demographics tables exist in Demographics (#3)
             if metadata_type == "Records" and component not in ["Biospecimen", "Demographics", "ChannelMetadata", "SpatialPanel", "MolecularAssignment"]:

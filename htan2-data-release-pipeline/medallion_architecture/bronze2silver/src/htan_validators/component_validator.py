@@ -27,9 +27,9 @@ following checks on component-specific metadata tables:
         - ADJACENT_BIOSPECIMEN_ID exist in HTAN_BIOSPECIMEN_ID in the Biospecimen Component
         - HTAN_PARENT_ID exist in HTAN_BIOSPECIMEN_ID in the Biospecimen Component
 
-    5. **Exclusion List Cross-Referencing:** Compares the files uploaded to Synapse to
-    those submitted to the Exclusion List Request Form, and flags any files marked
-    for exclusion. 
+    5. **Exclusion List Cross-Referencing:** Compares the files, clinical, and biospecimen 
+    information uploaded to Synapse to those submitted to the Exclusion List Request Form,
+    and flags any files, Participant IDs, and Biospecimen IDs marked for exclusion. 
 
     6. **File Size:** Check the file size of large format files (fastq, ome-tiffs, ect.)
     and tabular format files. A cutoff has been set for large and tabular format files. 
@@ -91,7 +91,7 @@ class HTANComponentValidator(BaseValidator):
 
         for idx, ids in df[htan_col].items():
 
-            # Break down list-strings from BQ 
+            # Break down list-strings from BQ
             ids = self.break_bq_list(ids)
 
             # Check regex patterns
@@ -218,20 +218,20 @@ class HTANComponentValidator(BaseValidator):
                     message=f"{col} is null."
                 )
 
-            # Allow the Molecular_Test Assay to have duplicated HTAN_Participant_IDs
+            # Allow the Molecular Test Assay to have duplicated Participant IDs
             # (Participants have multiple mutations/results as rows.)
             if col == 'HTAN_PARTICIPANT_ID' and component == 'MolecularTest':
                 continue
-            else:
-                # Check for duplicate values
-                dup_mask = df[col].duplicated(keep=False) & df[col].notna()
-                for idx in df[dup_mask].index:
-                    self.append_error(
-                        df,
-                        idx,
-                        error_type="DUPLICATE_HTAN_ID",
-                        message=f"{col} is duplicated."
-                    )
+
+            # Check for duplicate values
+            dup_mask = df[col].duplicated(keep=False) & df[col].notna()
+            for idx in df[dup_mask].index:
+                self.append_error(
+                    df,
+                    idx,
+                    error_type="DUPLICATE_HTAN_ID",
+                    message=f"{col} is duplicated."
+                )
 
         return df
 
