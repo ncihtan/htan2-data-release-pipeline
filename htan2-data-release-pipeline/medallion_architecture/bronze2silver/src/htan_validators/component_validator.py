@@ -482,32 +482,49 @@ class HTANComponentValidator(BaseValidator):
         for center_val, group in df.groupby(center_col):
             if pd.isna(center_val) or not str(center_val).strip():
                 continue
-
-            query = str(center_val).strip().lower()
-
-            # Strict match: match ONLY df HTAN_Center with yaml HTAN_Center
+        
+            query = str(center_val).strip()
+            #Match HTAN_Center with yaml HTAN_Center
             valid_prefixes = tuple(
-                str(entry["prefix"]).strip().lower()
+                str(entry["prefix"]).strip()
                 for entry in projects
-                if "prefix" in entry and query == str(entry.get("HTAN_Center", "")).strip().lower()
+                if "prefix" in entry and query == str(entry.get("HTAN_Center", "")).strip()
             )
-
+        
             if not valid_prefixes:
                 continue
-
-            # Check all HTAN ID columns for non-matching prefixes
+        
+            #Check all HTAN ID columns for non-matching prefixes
             for col in htan_id_cols:
-                col_series = group[col].fillna("").astype(str).str.lower().str.strip()
-                invalid_mask = (col_series != "") & (~col_series.str.startswith(valid_prefixes))
-
-                for idx in group[invalid_mask].index:
-                    expected_prefix = ", ".join(valid_prefixes).upper()
-                    self.append_error(
-                        df,
-                        idx,
-                        error_type="INVALID_HTAN_ID",
-                        message=f"ID '{df.at[idx, col]}' in column '{col}' does not start with expected prefix '{expected_prefix}' for center '{center_val}'."
+                if "HTAN_PARENT_ID" != col:
+                    col_series = group[col].fillna("").astype(str)
+                    #(True if HTAN ID is invalid and doesn't match)
+                    invalid_mask = (col_series != "") & (~col_series.str.startswith(valid_prefixes))
+                #If the column IS the parent ID, unnest first and then perform a check.
+                else:
+                    parent_series = group[col].apply(
+                        lambda x: x.split(",") if isinstance(x, str) and ("," in x or x.startswith("[")) else x
                     )
+                    #Unnest and strip quotes, brackets, backslashes, and whitespace
+                    col_series = (
+                        parent_series.explode()
+                        .fillna("")
+                        .astype(str)
+                        .str.strip('[]"\'\\ \t\n\r')
+                    )
+                    #Mark invalid items
+                    invalid_items = (col_series != "") & (~col_series.str.startswith(valid_prefixes))
+                    #Re-align mask with original group column index (True if ANY parent ID is invalid)
+                    invalid_mask = invalid_items.groupby(level=0).any()
+        
+            for idx in group[invalid_mask].index:
+                expected_prefix = ", ".join(valid_prefixes)
+                self.append_error(
+                    df,
+                    idx,
+                    error_type="INVALID_HTAN_ID",
+                    message=f"ID '{df.at[idx, col]}' in column '{col}' does not start with expected prefix '{expected_prefix}' for center '{center_val}'."
+                )
 
         return df
 
