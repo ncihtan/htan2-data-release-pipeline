@@ -1,0 +1,51 @@
+projects:
+  - prefix: HTA200
+    institution: University of California San Francisco
+    project_number: 1U01CA294536-01
+    atlas_type: Pre-Cancer Atlas
+    HTAN_Center: HTAN2_Skin
+  - prefix: HTA201
+    institution: Oregon Health & Science University
+    project_number: 1U01CA294548-01
+    atlas_type: Pre-Cancer Atlas
+    HTAN_Center: HTAN2_Pancreatic
+  - prefix: HTA202
+    institution: California Institute of Technology
+    project_number: 1U01CA294551-01
+    atlas_type: Pre-Cancer Atlas
+    HTAN_Center: HTAN2_Glioma
+  - prefix: HTA203
+    institution: MD Anderson
+    project_number: U01CA294518-01
+    atlas_type: Pre-Cancer Atlas
+    HTAN_Center: HTAN2_Gastric
+  - prefix: HTA204
+    institution: Dana-Farber Cancer Institute
+    project_number: 1U01CA294507-01
+    atlas_type: Pre-Cancer Atlas
+    HTAN_Center: HTAN2_Myeloma
+  - prefix: HTA205
+    institution: Children's Hospital of Los Angeles
+    project_number: 1U01CA294552-01
+    atlas_type: Tumor Atlas
+    HTAN_Center: HTAN2_Pediatric
+  - prefix: HTA206
+    institution: Washington University in St. Louis
+    project_number: 1U01CA294532-01
+    atlas_type: Tumor Atlas
+    HTAN_Center: HTAN2_Prostate
+  - prefix: HTA207
+    institution: Vanderbilt University
+    project_number: 1U01CA294527-01
+    atlas_type: Tumor Atlas
+    HTAN_Center: HTAN2_Colorectal
+  - prefix: HTA208
+    institution: MD Anderson
+    project_number: 1U01CA294459-01
+    atlas_type: Tumor Atlas
+    HTAN_Center: HTAN2_Ovarian
+  - prefix: HTA209
+    institution: Yale University
+    project_number: 1U01CA294514-01
+    atlas_type: Tumor Atlas
+    HTAN_Center: HTAN2_Lymphoma
