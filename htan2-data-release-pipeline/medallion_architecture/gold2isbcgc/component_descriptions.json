@@ -53,5 +53,10 @@
         "name": "BQ_Hash_Record_ID",
         "type": "STRING",
         "description": "Hash-based identifier used to uniquely identify a record in a Synapse Record Set."
+    },
+    {
+        "name": "Schema_Version",
+        "type": "STRING",
+        "description": "Data model version the file or record was validated under."
     }
 ]
