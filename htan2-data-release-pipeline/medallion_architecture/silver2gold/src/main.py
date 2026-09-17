@@ -102,6 +102,26 @@ def main():
     print(file_validation_information)
     
     validated_records = client.query(record_validation_information).to_dataframe()
+    
+    print_sub_section("PULLING SCHEMA INFORMATION FROM BRONZE")
+    #---------------------------------------------------------------------------------
+    bronze_file_schema = f"""
+        SELECT *
+        FROM `{PROJECT}.{BRONZE_DATASET}.bronze_INDEXING_TABLE_All_Files_With_Schema_Information`
+    """
+    print(bronze_file_schema)
+
+    bronze_file_schema = client.query(bronze_file_schema).to_dataframe()
+    bronze_file_schema = bronze_file_schema[["File_EntityId", "Schema_Version"]].drop_duplicates()
+    
+    bronze_record_schema = f"""
+        SELECT *
+        FROM `{PROJECT}.{BRONZE_DATASET}.bronze_INDEXING_TABLE_All_RecordSets_With_Schema_Information`
+    """
+    print(bronze_record_schema)
+    
+    bronze_record_schema = client.query(bronze_record_schema).to_dataframe()
+    bronze_record_schema = bronze_record_schema[["Record_EntityId", "Schema_Version"]].drop_duplicates()
 
     print_sub_section("CREATING STAGING DATASETS FOR RELEASE")
     #---------------------------------------------------------------------------------
@@ -140,7 +160,8 @@ def main():
             df = df[df['HTAN_Center'].isin(confirmed_center_list['HTAN_Center'])]
 
             if not df.empty:
-                file_slice = df[['Filename','File_EntityId', 'HTAN_Center', 'Status_Folder_Name', 'BQ_Hash_ID', 'Component']].copy()
+                df = pd.merge(df, bronze_file_schema, on="File_EntityId")
+                file_slice = df[['Filename','File_EntityId', 'HTAN_Center', 'Status_Folder_Name', 'BQ_Hash_ID', 'Component', 'Schema_Version']].copy()
                 collected_files_list.append(file_slice)
         
         if metadata_type == "Records":
@@ -150,7 +171,8 @@ def main():
             df = df[df['HTAN_Center'].isin(confirmed_center_list['HTAN_Center'])]
             
             if not df.empty:
-                record_slice = df[['Record_EntityId', 'BQ_Hash_Record_ID', 'HTAN_Center', 'Component', 'Status_Folder_Name']].copy()
+                df = pd.merge(df, bronze_record_schema, on="Record_EntityId")
+                record_slice = df[['Record_EntityId', 'BQ_Hash_Record_ID', 'HTAN_Center', 'Component', 'Status_Folder_Name', 'Schema_Version']].copy()
                 collected_records_list.append(record_slice)
         
 
@@ -235,6 +257,7 @@ def main():
         if metadata_type == "Files":
             df = query_bigquery_table(client, PROJECT, BRONZE_DATASET, table_id)
             df = df[df['Status_Folder_Name'].str.contains('release')]
+            df = pd.merge(df, bronze_file_schema, on="File_EntityId")
             cols_to_drop = [col for col in df.columns if any(val_column in col for val_column in validation_columns)]
             df = df.drop(columns=cols_to_drop)
             
@@ -293,6 +316,7 @@ def main():
         if metadata_type == "Records":
             df = query_bigquery_table(client, PROJECT, BRONZE_DATASET, table_id)
             df = df[df['Status_Folder_Name'].str.contains('release')]
+            df = pd.merge(df, bronze_record_schema, on="Record_EntityId")
             cols_to_drop = [col for col in df.columns if any(val_column in col for val_column in validation_columns)]
             df = df.drop(columns=cols_to_drop)
             if 'HTAN_PARTICIPANT_ID' in df.columns:
@@ -362,6 +386,7 @@ def main():
 
     bronze_prov = client.query(bronze_provenance_query).to_dataframe()
     gold_prov = bronze_prov[bronze_prov['File_EntityId'].isin(current_released_entities['File_EntityId'])]
+    gold_prov = pd.merge(gold_prov, bronze_file_schema, on="File_EntityId")
     
     load_bq(
             client,

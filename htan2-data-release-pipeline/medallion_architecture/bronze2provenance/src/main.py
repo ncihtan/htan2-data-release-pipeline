@@ -8,9 +8,8 @@ Requires (env):
 - BQ_DATASET (defaults to 'htan2_synapse_bronze')
 
 Authors: Dar'ya Pozhidayeva
-Updated: 2026-03-24
+Updated: 09-16-2026
 """
-
 import pandas as pd
 import re
 import ast
@@ -213,7 +212,7 @@ def main() -> None:
 
     # store string version
     f_paths["Full_Provenance_Chain"] = f_paths["Provenance_Paths"].apply(
-        lambda x: " -> ".join(map(str, x)) if isinstance(x, list) else pd.NA)
+        lambda x: " > ".join(map(str, x)) if isinstance(x, list) else pd.NA)
 
     f_paths["Depth_Prov_Chain"] = f_paths["Provenance_Paths"].apply(
         lambda x: len(x) if isinstance(x, list) else pd.NA)
@@ -238,4 +237,3 @@ def main() -> None:
   
 if __name__ == "__main__":
     main()
-
