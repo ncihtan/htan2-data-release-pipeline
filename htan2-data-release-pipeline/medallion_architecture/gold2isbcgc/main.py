@@ -52,7 +52,7 @@ ISBCGC_PROJECT = "isb-cgc-bq"
 HTAN2_DATASET = "HTAN2"
 
 # STANDARD METADATA
-DATASETS =  "HTAN2 and HTAN2_versioned"
+DATASETS =  "HTAN2"
 ACCESS = "open"
 STATUS = "current"
 PROGRAM = "htan2"
@@ -325,7 +325,7 @@ def main():
             })
 
         # Rename table to ISB-CGC-BQ friendly
-        isbcgc_table_name = f"HTAN2_{component}_{metadata_type}_Metadata"
+        isbcgc_table_name = f"{component}_{metadata_type}_Metadata"
         component_friendly = friendly_component(component)
 
         # Construct isb-cgc metadata for each GOLD metadata table
@@ -369,7 +369,7 @@ def main():
     print_sub_section("STAGING DATA MODEL")
 
     # Extract the data model version (e.g., v2.0.0) and generate the table name
-    data_model_name = f"{versioned_table.split("_v")[0]}_Schema"
+    data_model_name = f"{versioned_table.replace('HTAN2_', '')}_Schema"
 
     # Open DATA MODEL JSON
     with open('data_model_descriptions.json', 'r', encoding='utf-8') as file:
@@ -414,7 +414,7 @@ def main():
     print_sub_section("STAGING PROVENANCE TABLE")
 
     # Declare isb-cgc provenance table name
-    isbcgc_prov_table_name = "HTAN2_ID_Provenance_Chain"
+    isbcgc_prov_table_name = "ID_Provenance_Chain"
 
     # Open ID PROV JSON
     with open('id_prov_descriptions.json', 'r', encoding='utf-8') as file:
