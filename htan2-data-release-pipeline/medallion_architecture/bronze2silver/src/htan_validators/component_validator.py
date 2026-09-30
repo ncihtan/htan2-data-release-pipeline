@@ -40,10 +40,11 @@ following checks on component-specific metadata tables:
         - No file can be 0 bytes.
     
     7. **Age Verification:** Ensure that ages submitted are comply with PII and data model
-    standards. Age in days must be:
+    standards. The age cut-offs shown are in compliance with the Sage Bionetworks Data Governance 
+    team. Age in days must be:
 
-        - less than 32485 days (89 years old)
-        - greater than 6570 (18 years old) unless it is confirmed they are Pediatric patients
+        - less than (90 * 365) - 1 days (32849 days, 90 years old)
+        - greater than (18 * 365) - 1 days (16569 days, 18 years old) unless it is confirmed they are Pediatric patients
 """
 import re
 import pandas as pd
@@ -427,7 +428,7 @@ class HTANComponentValidator(BaseValidator):
         numeric_sizes = pd.to_numeric(df[syn_filesize], errors="coerce")        
         formats = df[syn_filetype].astype(str).str.lower().str.strip()
 
-        #Define the types of files to be checked for sizes.
+        # Define the types of files to be checked for sizes.
         large_formats = ["fastq", "bam", "ome-tiff", "tiff", "gzip"]
         tabular_formats = ["csv", "tsv", "txt"]
 
@@ -531,8 +532,8 @@ class HTANComponentValidator(BaseValidator):
     def check_ages(self, df):
         """
         Flag columns pertaining to age where the age reported:
-            - is > 32485 (89 years old)
-            - is < 6570 (18 years old)
+            - is > (90 * 365) - 1 (90 years old)
+            - is < (18 * 365) - 1 (18 years old)
 
         Args:
             df (pandas.DataFrame): 
@@ -549,32 +550,32 @@ class HTANComponentValidator(BaseValidator):
         if not age_columns:
             return df
 
-        min_age_days = 18 * 365
-        max_age_days = 89 * 365
+        min_age_days = int((18 * 365) - 1)
+        max_age_days = int((90 * 365) - 1)
         age_not_available = -1
 
         for col in age_columns:
 
             numeric_ages = pd.to_numeric(df[col], errors="coerce")
 
-            # Check if ages are over 89 years old (32485 days)
-            over_89 = numeric_ages > max_age_days
-            for idx in df[over_89].index:
+            # Check if ages are over 90 years old
+            over_90 = numeric_ages > max_age_days
+            for idx in df[over_90].index:
                 self.append_error(
                     df,
                     idx,
-                    error_type="AGE_OVER_89",
-                    message=f"{df.at[idx, col]} in {col} is greater than 89 years old (32485 days)"
+                    error_type="AGE_OVER_90",
+                    message=f"{df.at[idx, col]} in {col} is greater than 90 years old ({max_age_days} days)"
                 )
 
-            # Check ig ages are under 18 years old (6570 days)
+            # Check if ages are under 18 years old
             under_18 = (numeric_ages < min_age_days) & (numeric_ages != age_not_available)
             for idx in df[under_18].index:
                 self.append_error(
                     df,
                     idx,
                     error_type="AGE_UNDER_18",
-                    message=f"{df.at[idx, col]} in {col} is under 18 years old (6570 days)"
+                    message=f"{df.at[idx, col]} in {col} is under 18 years old ({min_age_days} days)"
                 )
 
         return df

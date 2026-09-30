@@ -643,7 +643,6 @@ def main():
                 "silver_INDEXING_TABLE_All_Records_Passed_Validation_Counts",
                 summary_count_records
             )
-        
-    
+
 if __name__ == "__main__":
     main()
