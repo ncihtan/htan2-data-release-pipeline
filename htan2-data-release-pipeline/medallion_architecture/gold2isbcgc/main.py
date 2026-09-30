@@ -24,10 +24,10 @@ Functions:
     - friendly_component(component)
     - main()
     
-Author: Yamina Katariya <ykatariy@systemsbiology.org>
+Author:       Yamina Katariya <ykatariy@systemsbiology.org>
 Date Created: 08-19-2026
-Date Updated: 09-30-2026
-Modified By: Darya Pozhidayeva <dpozhida@systemsbiology.org>
+Date Updated: 
+Modified By:  
 """
 
 import re
@@ -224,7 +224,7 @@ def main():
     # PULL DATA MODEL
     ##########################
 
-    versioned_table = f'HTAN2_Data_Model_{model_version.replace(".", "_")}'
+    versioned_table = f"HTAN2_Data_Model_{model_version.replace(".", "_")}"
 
     versioned_data_model = query_bigquery_table(client,
                                              PROJECT,
@@ -300,18 +300,10 @@ def main():
                            "File_Size_Bytes",
                            "File_MD5",
                            "HTAN_Center",
-                           "Component",
-                           "Data_Release",
-                           "CRDC_Release"]
+                           "Status_Folder_Name",
+                           "Component"]
         df = df[[col for col in columns_to_keep if col in df.columns]]
 
-        #Apply changes advised by Fabian at ISB-CGC on 09-16-2026
-        # Strip [, ], and ' from all object/string columns
-        object_cols = df.select_dtypes(include=['object', 'string']).columns
-        df[object_cols] = df[object_cols].apply(
-            lambda col: col.astype(str).str.replace(r'[\[\]\'"]', '', regex=True)
-        )
-        
         # Build the schema as a list of dictionaries, one for each attribute
         schema = []
         for attrs in df.columns:
@@ -439,9 +431,6 @@ def main():
         GOLD_DATASET,
         "gold_RELEASED_INDEXING_TABLE_All_Files_and_Records_ID_Provenance",
     )
-    
-    #Drop schema_status folder - now replaced with
-    id_prov = id_prov.drop(columns=["Status_Folder_Name"])
 
     # Build prov schema. For component attributes, get from component JSON
     prov_schema = []

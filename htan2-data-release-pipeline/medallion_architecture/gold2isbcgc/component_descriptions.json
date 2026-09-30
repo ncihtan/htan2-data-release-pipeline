@@ -35,6 +35,11 @@
         "description": "Synapse ID of the folder the entity resides in."
     },
     {
+        "name": "Status_Folder_Name",
+        "type": "STRING",
+        "description": "HTAN2 release tag."
+    },
+    {
         "name": "Component",
         "type": "STRING",
         "description": "The metadata component or assay type that the record describes (e.g., Diagnosis, Biospecimen, scRNALevel1, etc.)."
@@ -48,20 +53,5 @@
         "name": "BQ_Hash_Record_ID",
         "type": "STRING",
         "description": "Hash-based identifier used to uniquely identify a record in a Synapse Record Set."
-    },
-    {
-        "name": "Data_Release",
-        "type": "STRING",
-        "description": "HTAN2 portal data release tag."
-    },
-    {
-        "name": "CRDC_Release",
-        "type": "STRING",
-        "description": "CRDC portal submission and release tag."
-    },
-    {
-    "name": "Schema_Version",
-    "type": "STRING",
-    "description": "Data model version the file or record was validated under."
     }
 ]
