@@ -28,5 +28,20 @@
         "name": "BIOSPECIMEN_PATH",
         "type": "STRING",
         "description": "Full Biospecimen ancestry path from HTAN_ASSAYED_BIOSPECIMEN_ID to HTAN_ORIGINATING_BIOSPECIMEN_ID as comma separated list."
+    },
+    {
+        "name": "Data_Release",
+        "type": "STRING",
+        "description": "HTAN2 portal data release tag."
+    },
+    {
+        "name": "CRDC_Release",
+        "type": "STRING",
+        "description": "CRDC portal submission and release tag."
+    },
+    {
+        "name": "Schema_Version",
+        "type": "STRING",
+        "description": "Data model version the file or record was validated under."
     }
 ]
