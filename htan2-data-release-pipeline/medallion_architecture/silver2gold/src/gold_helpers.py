@@ -4,6 +4,7 @@
 Gold layer helper functions.
 """
 import pandas as pd
+import re
 
 def print_sub_section(title):
     """
@@ -48,12 +49,14 @@ def process_excluded_panels(exclude_df, expected_panel_counts):
     return panel_check_df
 
 def apply_age_masking(df, client, project, dataset, table_id, max_age_days):
-    """Applies age masking based on error messages from the silver layer."""
+    """Applies age masking to specific age columns flagged in silver layer error messages."""
     age_cols = [c for c in df.columns if "AGE_IN_" in c]
     if not age_cols:
         return df
         
     silver_tid = table_id.replace("bronze_", "silver_")
+    
+    #Query matching AGE_OVER_90, etc.
     age_masking_query = f"""
         SELECT BQ_Hash_Record_ID, Release_Error_Messages 
         FROM `{project}.{dataset}.{silver_tid}` 
@@ -61,17 +64,29 @@ def apply_age_masking(df, client, project, dataset, table_id, max_age_days):
         """
     age_masking_results = client.query(age_masking_query).to_dataframe()
 
-    # Identify matching BQ_Hash_Record_IDs if results exist
-    if not age_masking_results.empty and "BQ_Hash_Record_ID" in age_masking_results.columns:
-        obfuscated_ids = set(age_masking_results["BQ_Hash_Record_ID"].dropna())
-        df["AGE_IS_OBFUSCATED"] = df["BQ_Hash_Record_ID"].isin(obfuscated_ids)
-    else:
-        df["AGE_IS_OBFUSCATED"] = False
+    #Track whether any age column was obfuscated for a given record
+    df["AGE_IS_OBFUSCATED"] = False
 
-    # Overwrite original age values with max_age_days where obfuscated is True
-    for col in age_cols:
-        df.loc[df["AGE_IS_OBFUSCATED"], col] = max_age_days
-        
+    if not age_masking_results.empty and "BQ_Hash_Record_ID" in age_masking_results.columns:
+        # Stringify error messages to support list/dict structures returned by BigQuery
+        age_masking_results["msg_str"] = age_masking_results["Release_Error_Messages"].astype(str)
+
+        for col in age_cols:
+            # Match records where the specific column name appears in Release_Error_Messages
+            # Word boundaries (\b) prevent partial matching on similar column names
+            pattern = rf"\b{re.escape(col)}\b"
+            matching_ids = set(
+                age_masking_results[
+                    age_masking_results["msg_str"].str.contains(pattern, regex=True, na=False)
+                ]["BQ_Hash_Record_ID"].dropna()
+            )
+
+            if matching_ids:
+                col_mask = df["BQ_Hash_Record_ID"].isin(matching_ids)
+                # Overwrite ONLY the matching column for identified records
+                df.loc[col_mask, col] = max_age_days
+                df.loc[col_mask, "AGE_IS_OBFUSCATED"] = True
+
     return df
 
 def derive_age_in_months(df):
@@ -81,10 +96,12 @@ def derive_age_in_months(df):
     """
     for col in [c for c in df.columns if "AGE_IN_" in c]:
         new_col = col.replace("AGE_IN_DAYS_", "AGE_IN_MONTHS_APPROXIMATED_")
+    
         df[new_col] = df[col]
-        #Check if the number is positive and not null for the calculation.
+    
         numeric_age = pd.to_numeric(df[col], errors="coerce")
         is_positive = numeric_age > 0
+    
         df.loc[is_positive, new_col] = ((numeric_age[is_positive] - 1) * 12 / 365).astype(int)
         
     return df
