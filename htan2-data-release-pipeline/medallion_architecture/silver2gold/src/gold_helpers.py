@@ -81,7 +81,10 @@ def derive_age_in_months(df):
     """
     for col in [c for c in df.columns if "AGE_IN_" in c]:
         new_col = col.replace("AGE_IN_DAYS_", "AGE_IN_MONTHS_APPROXIMATED_")
-        # If anything is negative, non-zero or otherwise, make it 0.
-        clean_age = pd.to_numeric(df[col], errors="coerce").where(lambda x: x > 0, 0)
-        df[new_col] = ((clean_age - 1) * 12 / 365).astype(int)
+        df[new_col] = df[col]
+        #Check if the number is positive and not null for the calculation.
+        numeric_age = pd.to_numeric(df[col], errors="coerce")
+        is_positive = numeric_age > 0
+        df.loc[is_positive, new_col] = ((numeric_age[is_positive] - 1) * 12 / 365).astype(int)
+        
     return df
