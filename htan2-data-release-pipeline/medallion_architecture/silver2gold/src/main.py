@@ -8,64 +8,44 @@ Medallion Architecture: Silver to Gold
     tables for both Files and Record Sets. 
 
 Configurations: None
-
-Functions:
-    - query_bigquery_table(client, project_id, dataset_id, table_id)
-    - print_sub_section(title)
     
 Author: Dar'ya Pozhidayeva, Yamina Katariya
 Updated: 09/30/2026
 """
 import pandas as pd
-from client_load import (
-    load_bq,
-    init_bq_client
+from client_load import load_bq, init_bq_client
+
+# Import custom modularized help functions
+from gold_helpers import (
+    print_sub_section,
+    query_bigquery_table,
+    process_excluded_panels,
+    apply_age_masking,
+    derive_age_in_months
 )
+
 #####################################################
-#             SETTING GLOBAL VARIABLES
+#             GLOBAL CONFIGURATIONS
 #####################################################
+
+# BigQuery Project & Dataset Identifiers
 PROJECT = "htan2-dcc"
 RAW_DATASET = "htan2_synapse_raw"
 BRONZE_DATASET = "htan2_medallion_bronze"
 SILVER_DATASET = "htan2_medallion_silver"
 GOLD_DATASET = "htan2_medallion_gold"
 DM_DATASET = "htan2_data_model_cache"
-#####################################################
-#                 HELPER FUNCTIONS
-#####################################################
 
-def query_bigquery_table(client, project_id, dataset_id, table_id):
-    """
-    Get an entire table from BigQuery as a Pandas DataFrame.
+# External Data Sources
+CONFIRMED_CENTERS_URL = "https://docs.google.com/spreadsheets/d/1wQ5XZ9uYtAzKKe3cANam8UBdOofuFaAEod-AWDdWK8Q/export?format=csv&gid=0"
 
-    Args:
-        - client (BigQuery instance): A BigQuery client object.
-        - project_id (str): BigQuery project name.
-        - dataset_id (str): BigQuery dataset name.
-        - table_id (str): BigQuery table name.
-    
-    Returns:
-        - (pandas.DataFrame): The BigQuery table as a dataframe.
-    """
-    query = f"""
-        SELECT *
-        FROM `{project_id}.{dataset_id}.{table_id}`
-    """
-    return client.query(query).to_dataframe()
-
-def print_sub_section(title):
-    """
-    Print subsection headers.
-
-    Args:
-        - title (string): The title to be printed.
-    """
-    border = "=" * (len(title) + 8)
-    print(f"\n{border}\n>>> {title.upper()} <<<\n{border}\n")
+# Business & Filtering Logic Constants
+MAX_AGE_DAYS = int((90 * 365) - 1)  # AGE OBFUSCATION CUT OFF
+VALIDATION_COLUMNS = ['Validation', 'Error', 'Violations', 'Valid', 'Validated']  # For dropping validation columns
 
 #####################################################
 #                   MAIN 
-#####################################################=
+#####################################################
 def main():
     """
     Entry point into the GOLD layer.
@@ -75,72 +55,35 @@ def main():
     
     print_sub_section("PULLING THE EXCLUSION LIST FOR POST-RELEASE EXCLUSIONS")
     #---------------------------------------------------------------------------------
-    exclusion_information_query = f"""
-        SELECT *
-        FROM `{PROJECT}.{RAW_DATASET}.raw_INDEXING_TABLE_Exclusion_List_Form_Results`
-    """
-    print(exclusion_information_query)
-
-    exclusion_files = client.query(exclusion_information_query).to_dataframe()
-    
+    exclusion_files = query_bigquery_table(client, PROJECT, RAW_DATASET, "raw_INDEXING_TABLE_Exclusion_List_Form_Results")
     exclusion_files = exclusion_files.loc[exclusion_files['Status'] == "EXCLUDE"]
     
     print_sub_section("PULLING FILE VALIDATION RESULTS IN SILVER LAYER")
     #---------------------------------------------------------------------------------
-    file_validation_information = f"""
-        SELECT *
-        FROM `{PROJECT}.{SILVER_DATASET}.silver_INDEXING_TABLE_All_Files_Passed_Validation`
-    """
-    print(file_validation_information)
-
-    validated_files = client.query(file_validation_information).to_dataframe()
-    
-    record_validation_information = f"""
-        SELECT *
-        FROM `{PROJECT}.{SILVER_DATASET}.silver_INDEXING_TABLE_All_Records_Passed_Validation`
-    """
-    print(file_validation_information)
-    
-    validated_records = client.query(record_validation_information).to_dataframe()
+    validated_files = query_bigquery_table(client, PROJECT, SILVER_DATASET, "silver_INDEXING_TABLE_All_Files_Passed_Validation")
+    validated_records = query_bigquery_table(client, PROJECT, SILVER_DATASET, "silver_INDEXING_TABLE_All_Records_Passed_Validation")
     
     print_sub_section("PULLING SCHEMA INFORMATION FROM BRONZE")
     #---------------------------------------------------------------------------------
-    bronze_file_schema = f"""
-        SELECT *
-        FROM `{PROJECT}.{BRONZE_DATASET}.bronze_INDEXING_TABLE_All_Files_With_Schema_Information`
-    """
-    print(bronze_file_schema)
-
-    bronze_file_schema = client.query(bronze_file_schema).to_dataframe()
+    bronze_file_schema = query_bigquery_table(client, PROJECT, BRONZE_DATASET, "bronze_INDEXING_TABLE_All_Files_With_Schema_Information")
     bronze_file_schema = bronze_file_schema[["File_EntityId", "Schema_Version"]].drop_duplicates()
     
-    bronze_record_schema = f"""
-        SELECT *
-        FROM `{PROJECT}.{BRONZE_DATASET}.bronze_INDEXING_TABLE_All_RecordSets_With_Schema_Information`
-    """
-    print(bronze_record_schema)
-    
-    bronze_record_schema = client.query(bronze_record_schema).to_dataframe()
+    bronze_record_schema = query_bigquery_table(client, PROJECT, BRONZE_DATASET, "bronze_INDEXING_TABLE_All_RecordSets_With_Schema_Information")
     bronze_record_schema = bronze_record_schema[["Record_EntityId", "Schema_Version"]].drop_duplicates()
 
     print_sub_section("CREATING STAGING DATASETS FOR RELEASE")
     #---------------------------------------------------------------------------------
-    #Confirmed Centers for Release Table
-    url = "https://docs.google.com/spreadsheets/d/1wQ5XZ9uYtAzKKe3cANam8UBdOofuFaAEod-AWDdWK8Q/export?format=csv&gid=0" # Skip the header lines in the doc.
-    confirmed_center_list = pd.read_csv(url, skiprows=4)
-    #Load to BQ
-    load_bq(
-        client,
-        PROJECT,
-        GOLD_DATASET,
-        "gold_STAGING_FOR_RELASE_INDEXING_TABLE_Confirmed_Centers_in_Data_Releases",
-        confirmed_center_list)
+    # Confirmed Centers for Release Table (Skip the header lines in the doc)
+    confirmed_center_list = pd.read_csv(CONFIRMED_CENTERS_URL, skiprows=4)
+    
+    # Load to BQ
+    load_bq(client, PROJECT, GOLD_DATASET, "gold_STAGING_FOR_RELASE_INDEXING_TABLE_Confirmed_Centers_in_Data_Releases", confirmed_center_list)
 
     bronze_tables = list(client.list_tables(f"{PROJECT}.{BRONZE_DATASET}"))
     bronze_metadata = [
-        table.table_id
-        for table in bronze_tables
-        if table.table_id.startswith("bronze_METADATA_TABLE_All")]
+        table.table_id for table in bronze_tables
+        if table.table_id.startswith("bronze_METADATA_TABLE_All")
+    ]
     
     collected_files_list = []
     collected_records_list = []
@@ -150,11 +93,10 @@ def main():
         metadata_type = table_id.split("_")[4]
         component = table_id.split("_")[5]
         
-        df = None
+        df = query_bigquery_table(client, PROJECT, BRONZE_DATASET, table_id)
         
         if metadata_type == "Files":
-            df = query_bigquery_table(client, PROJECT, BRONZE_DATASET, table_id)
-            #File entityid remains the same regardless of location
+            # File entityid remains the same regardless of location
             df = df[df['File_EntityId'].isin(validated_files['File_EntityId'])]
             df = df[df['Status_Folder_Name'].str.contains('ingest|staging')]
             df = df[df['HTAN_Center'].isin(confirmed_center_list['HTAN_Center'])]
@@ -164,8 +106,7 @@ def main():
                 file_slice = df[['Filename','File_EntityId', 'HTAN_Center', 'Status_Folder_Name', 'BQ_Hash_ID', 'Component', 'Schema_Version']].copy()
                 collected_files_list.append(file_slice)
         
-        if metadata_type == "Records":
-            df = query_bigquery_table(client, PROJECT, BRONZE_DATASET, table_id)
+        elif metadata_type == "Records":
             df = df[df['BQ_Hash_Record_ID'].isin(validated_records['BQ_Hash_Record_ID'])]
             df = df[df['Status_Folder_Name'].str.contains('ingest|staging')]
             df = df[df['HTAN_Center'].isin(confirmed_center_list['HTAN_Center'])]
@@ -175,97 +116,58 @@ def main():
                 record_slice = df[['Record_EntityId', 'BQ_Hash_Record_ID', 'HTAN_Center', 'Component', 'Status_Folder_Name', 'Schema_Version']].copy()
                 collected_records_list.append(record_slice)
         
-
     if collected_files_list:
         staged_files_df = pd.concat(collected_files_list, ignore_index=True)
     else:
         staged_files_df = pd.DataFrame(columns=['Filename','File_EntityId', 'HTAN_Center', 'Status_Folder_Name', 'BQ_Hash_ID', 'Component'])
     
-    load_bq(
-            client,
-            PROJECT,
-            GOLD_DATASET,
-            "gold_STAGING_FOR_RELEASE_INDEXING_TABLE_All_File_Staged_For_Current_Release",
-            staged_files_df
-        )
-    
+    load_bq(client, PROJECT, GOLD_DATASET, "gold_STAGING_FOR_RELEASE_INDEXING_TABLE_All_File_Staged_For_Current_Release", staged_files_df)
     staged_summary_count_files = staged_files_df.groupby(['Component', 'HTAN_Center', 'Status_Folder_Name']).size().reset_index(name='Number_of_Files')
-    
-    load_bq(
-            client,
-            PROJECT,
-            GOLD_DATASET,
-            "gold_STAGING_FOR_RELEASE_INDEXING_TABLE_All_File_Staged_For_Current_Release_Counts",
-            staged_summary_count_files
-        )
-    
+    load_bq(client, PROJECT, GOLD_DATASET, "gold_STAGING_FOR_RELEASE_INDEXING_TABLE_All_File_Staged_For_Current_Release_Counts", staged_summary_count_files)
     
     if collected_records_list:
         staged_records_df = pd.concat(collected_records_list, ignore_index=True)
     else:
         staged_records_df = pd.DataFrame(columns=['Record_EntityId', 'BQ_Hash_Record_ID', 'HTAN_Center', 'Component', 'Status_Folder_Name'])
 
-    load_bq(
-            client,
-            PROJECT,
-            GOLD_DATASET,
-            "gold_STAGING_FOR_RELEASE_INDEXING_TABLE_All_Record_Rows_Staged_For_Current_Release",
-            staged_records_df
-        )
-    
-    
+    load_bq(client, PROJECT, GOLD_DATASET, "gold_STAGING_FOR_RELEASE_INDEXING_TABLE_All_Record_Rows_Staged_For_Current_Release", staged_records_df)
     staged_summary_count_records = staged_records_df.groupby(['Component', 'HTAN_Center', 'Status_Folder_Name']).size().reset_index(name='Number_Rows_in_RecordSet')
-    
-    load_bq(
-            client,
-            PROJECT,
-            GOLD_DATASET,
-            "gold_STAGING_FOR_RELEASE_INDEXING_TABLE_All_Record_Rows_Staged_For_Current_Release_Counts",
-            staged_summary_count_records
-        )
+    load_bq(client, PROJECT, GOLD_DATASET, "gold_STAGING_FOR_RELEASE_INDEXING_TABLE_All_Record_Rows_Staged_For_Current_Release_Counts", staged_summary_count_records)
     
     
     print_sub_section("GENERATING CURRENTLY RELEASED FILES")
     #---------------------------------------------------------------------------------    
-    bronze_tables = list(client.list_tables(f"{PROJECT}.{BRONZE_DATASET}"))
-    bronze_metadata = [
-        table.table_id
-        for table in bronze_tables
-        if table.table_id.startswith("bronze_METADATA_TABLE_All_")
-    ]
+    bronze_metadata_release = [t for t in bronze_metadata if t.startswith("bronze_METADATA_TABLE_All_")]
     
     released_entities = []
     released_records = []
     removed_files_exclude_list = []
+    
     mm_panel_check_df = pd.DataFrame()
     spatial_panel_check_df = pd.DataFrame()
     mm_expected_panel_counts = pd.DataFrame()
     spatial_expected_panel_counts = pd.DataFrame()
     molecular_panel_check = pd.DataFrame(columns=['HTAN_DATA_FILE_ID'])
     
-    # For dropping validation columns
-    validation_columns = ['Validation', 'Error', 'Violations', 'Valid', 'Validated']
-    
-    for table_id in bronze_metadata:
+    for table_id in bronze_metadata_release:
         print("Filtering Table To Released Files: " + table_id)                
         metadata_type = table_id.split("_")[4]
         component = table_id.split("_")[5]
         
-        df = None
+        df = query_bigquery_table(client, PROJECT, BRONZE_DATASET, table_id)
+        df = df[df['Status_Folder_Name'].str.contains('release')]
         
         # FILE METADATA PORTION
         if metadata_type == "Files":
-            df = query_bigquery_table(client, PROJECT, BRONZE_DATASET, table_id)
-            df = df[df['Status_Folder_Name'].str.contains('release')]
             df = pd.merge(df, bronze_file_schema, on="File_EntityId")
-            cols_to_drop = [col for col in df.columns if any(val_column in col for val_column in validation_columns)]
+            cols_to_drop = [col for col in df.columns if any(val_column in col for val_column in VALIDATION_COLUMNS)]
             df = df.drop(columns=cols_to_drop)
             
             if "MultiplexMicroscopyLevel2" in table_id:
                 mm_expected_panel_counts = (df.groupby("HTAN_PANEL_ID")["File_EntityId"].nunique().reset_index(name="File_Count"))
             
             if "SpatialLevel3" in table_id:
-                spatial_expected_panel_counts = (df.groupby("HTAN_PANEL_ID")["File_EntityId"].nunique().reset_index(name="File_Count"))  # Fixed capitalization typo
+                spatial_expected_panel_counts = (df.groupby("HTAN_PANEL_ID")["File_EntityId"].nunique().reset_index(name="File_Count"))
             
             # Save excluding files before filtering them out below.
             if not df.empty:
@@ -281,27 +183,12 @@ def main():
                     continue
                     
                 component_name = removal_df['Component'].iloc[0]
-                exclude_df = removal_df
                 
                 if component_name == "MultiplexMicroscopyLevel2" and not mm_expected_panel_counts.empty:
-                    excluded_panel_counts = (
-                        exclude_df.groupby('HTAN_PANEL_ID')['File_EntityId']
-                        .nunique()
-                        .reset_index(name='Excluded_File_Count')
-                    )
-                    mm_panel_check_df = mm_expected_panel_counts.merge(excluded_panel_counts, on='HTAN_PANEL_ID', how='left')
-                    mm_panel_check_df['Excluded_File_Count'] = mm_panel_check_df['Excluded_File_Count'].fillna(0).astype(int)
-                    mm_panel_check_df['Fully_Excluded'] = mm_panel_check_df['File_Count'] == mm_panel_check_df['Excluded_File_Count']
+                    mm_panel_check_df = process_excluded_panels(removal_df, mm_expected_panel_counts)
                     
                 elif component_name == "SpatialLevel3" and not spatial_expected_panel_counts.empty:
-                    excluded_panel_counts = (
-                        exclude_df.groupby('HTAN_PANEL_ID')['File_EntityId']
-                        .nunique()
-                        .reset_index(name='Excluded_File_Count')
-                    )
-                    spatial_panel_check_df = spatial_expected_panel_counts.merge(excluded_panel_counts, on='HTAN_PANEL_ID', how='left')
-                    spatial_panel_check_df['Excluded_File_Count'] = spatial_panel_check_df['Excluded_File_Count'].fillna(0).astype(int)
-                    spatial_panel_check_df['Fully_Excluded'] = spatial_panel_check_df['File_Count'] == spatial_panel_check_df['Excluded_File_Count']
+                    spatial_panel_check_df = process_excluded_panels(removal_df, spatial_expected_panel_counts)
                     
                 elif component_name == "MolecularAssignment":
                     if 'HTAN_DATA_FILE_ID' in removal_df.columns:
@@ -313,12 +200,11 @@ def main():
                 released_entities.append(file_slice)
     
         # RECORD METADATA PORTION
-        if metadata_type == "Records":
-            df = query_bigquery_table(client, PROJECT, BRONZE_DATASET, table_id)
-            df = df[df['Status_Folder_Name'].str.contains('release')]
+        elif metadata_type == "Records":
             df = pd.merge(df, bronze_record_schema, on="Record_EntityId")
-            cols_to_drop = [col for col in df.columns if any(val_column in col for val_column in validation_columns)]
+            cols_to_drop = [col for col in df.columns if any(val_column in col for val_column in VALIDATION_COLUMNS)]
             df = df.drop(columns=cols_to_drop)
+
             if 'HTAN_PARTICIPANT_ID' in df.columns:
                 df = df[~df['HTAN_PARTICIPANT_ID'].isin(exclusion_files['HTAN_PARTICIPANT_ID'])]
             if 'HTAN_BIOSPECIMEN_ID' in df.columns:
@@ -337,77 +223,50 @@ def main():
             if not df.empty:
                 record_slice = df[['Record_EntityId', 'BQ_Hash_Record_ID']].copy()
                 released_records.append(record_slice)
-        
-        #ADD RELEASE TAG
-        # Extract the integer digit(s) following 'v' and before '_release' and format for release column
-        extracted_version = df["Status_Folder_Name"].str.extract(r"v(\d+)_release", expand=False)
-        df["Data_Release"] = "Release " + extracted_version + ".0"
-        
-        #TEMPORARY CRDC TAG
-        df["CRDC_Release"] = None
-        
-        
-        # Push tables to BQ for Gold Layer.        
-        if df is not None:
+                
+        # Common Tags & Derived fields application
+        if not df.empty:
+            # ADD RELEASE TAG - Extract the integer digit(s) following 'v' and before '_release' and format for release column
+            extracted_version = df["Status_Folder_Name"].str.extract(r"v(\d+)_release", expand=False)
+            df["Data_Release"] = "Release " + extracted_version + ".0"
+            df["CRDC_Release"] = None # TEMPORARY CRDC TAG
+            
+            # Mask ages & derive age in months logic (imported from gold_helpers)
+            df = apply_age_masking(df, client, PROJECT, SILVER_DATASET, table_id, MAX_AGE_DAYS)
+            df = derive_age_in_months(df)
+            
+            # Push tables to BQ for Gold Layer.        
             table_name = f"gold_RELEASED_METADATA_TABLE_All_{metadata_type}_{component}"
-            load_bq(
-                client,
-                PROJECT,
-                GOLD_DATASET,
-                table_name,
-                df
-            )
+            load_bq(client, PROJECT, GOLD_DATASET, table_name, df)
     
-    #Final Files DataFrame
+    # Final Files DataFrame
     if released_entities:
         current_released_entities = pd.concat(released_entities, ignore_index=True)
     else:
         current_released_entities = pd.DataFrame(columns=['File_EntityId', 'BQ_Hash_ID'])
     
-    #Final Records DataFrame
+    # Final Records DataFrame
     if released_records:
         current_released_records = pd.concat(released_records, ignore_index=True)
     else:
         current_released_records = pd.DataFrame(columns=['Record_EntityId', 'BQ_Hash_Record_ID'])
 
-    load_bq(
-            client,
-            PROJECT,
-            GOLD_DATASET,
-            "gold_RELEASED_INDEXING_TABLE_Released_Entities",
-            current_released_entities
-        )
-    
-    load_bq(
-            client,
-            PROJECT,
-            GOLD_DATASET,
-            "gold_RELEASED_INDEXING_TABLE_Released_RecordsetRows",
-            current_released_records
-        )
+    load_bq(client, PROJECT, GOLD_DATASET, "gold_RELEASED_INDEXING_TABLE_Released_Entities", current_released_entities)
+    load_bq(client, PROJECT, GOLD_DATASET, "gold_RELEASED_INDEXING_TABLE_Released_RecordsetRows", current_released_records)
 
     print_sub_section("PULLING BRONZE PROVENANCE TABLE")
     #---------------------------------------------------------------------------------
-    bronze_provenance_query = f"""
-        SELECT *
-        FROM `{PROJECT}.{BRONZE_DATASET}.bronze_INDEXING_TABLE_All_Files_and_Records_ID_Provenance`
-    """
-
-    bronze_prov = client.query(bronze_provenance_query).to_dataframe()
+    bronze_prov = query_bigquery_table(client, PROJECT, BRONZE_DATASET, "bronze_INDEXING_TABLE_All_Files_and_Records_ID_Provenance")
+    
     gold_prov = bronze_prov[bronze_prov['File_EntityId'].isin(current_released_entities['File_EntityId'])]
     gold_prov = pd.merge(gold_prov, bronze_file_schema, on="File_EntityId")
     idp_extracted_version = gold_prov["Status_Folder_Name"].str.extract(r"v(\d+)_release", expand=False)
     gold_prov["Data_Release"] = "Release " + idp_extracted_version + ".0"
-    #TEMPORARY ADDITION
+    
+    # TEMPORARY ADDITION
     gold_prov["CRDC_Release"] = None
 
-    load_bq(
-            client,
-            PROJECT,
-            GOLD_DATASET,
-            "gold_RELEASED_INDEXING_TABLE_All_Files_and_Records_ID_Provenance",
-            gold_prov
-        )
+    load_bq(client, PROJECT, GOLD_DATASET, "gold_RELEASED_INDEXING_TABLE_All_Files_and_Records_ID_Provenance", gold_prov)
 
     #---------------------------------------------------------------------------------
     print_sub_section("FETCHING AND UPDATING LATEST DATA MODEL TABLE")
@@ -415,35 +274,22 @@ def main():
     # Get all data models from BQ
     data_models = list(client.list_tables(f"{PROJECT}.{DM_DATASET}"))
     dm_versions = [
-        table.table_id
-        for table in data_models
+        table.table_id for table in data_models
         if table.table_id.startswith("HTAN2_Data_Model_")
     ]
 
     if dm_versions:
-
         # Get most recent data model table
         latest_model_table = sorted(dm_versions, reverse=True)[0]
         bq_version = latest_model_table.split("HTAN2_Data_Model_")[-1]
         github_version = bq_version.replace("_", ".")
 
         # Get table and add schema version
-        latest_model = query_bigquery_table(client,
-                                            PROJECT,
-                                            DM_DATASET,
-                                            latest_model_table)
+        latest_model = query_bigquery_table(client, PROJECT, DM_DATASET, latest_model_table)
         latest_model["Schema_Version"] = github_version
 
         # Push data model dictionary to BQ GOLD layer
-        load_bq(
-            client,
-            PROJECT,
-            GOLD_DATASET,
-            'gold_INDEXING_TABLE_Tabular_Data_Model',
-            latest_model
-        )
-        
-
+        load_bq(client, PROJECT, GOLD_DATASET, 'gold_INDEXING_TABLE_Tabular_Data_Model', latest_model)
 
 if __name__ == "__main__":
     main()
