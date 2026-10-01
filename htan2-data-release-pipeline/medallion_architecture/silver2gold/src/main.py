@@ -10,7 +10,7 @@ Medallion Architecture: Silver to Gold
 Configurations: None
     
 Author: Dar'ya Pozhidayeva, Yamina Katariya
-Updated: 09/30/2026
+Updated: 10/01/2026
 """
 import pandas as pd
 from client_load import load_bq, init_bq_client
