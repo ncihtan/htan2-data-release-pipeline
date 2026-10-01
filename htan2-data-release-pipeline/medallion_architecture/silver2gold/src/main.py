@@ -14,7 +14,7 @@ Functions:
     - print_sub_section(title)
     
 Author: Dar'ya Pozhidayeva, Yamina Katariya
-Updated: 08/25/2026
+Updated: 09/30/2026
 """
 import pandas as pd
 from client_load import (
@@ -337,7 +337,16 @@ def main():
             if not df.empty:
                 record_slice = df[['Record_EntityId', 'BQ_Hash_Record_ID']].copy()
                 released_records.append(record_slice)
-    
+        
+        #ADD RELEASE TAG
+        # Extract the integer digit(s) following 'v' and before '_release' and format for release column
+        extracted_version = df["Status_Folder_Name"].str.extract(r"v(\d+)_release", expand=False)
+        df["Data_Release"] = "Release " + extracted_version + ".0"
+        
+        #TEMPORARY CRDC TAG
+        df["CRDC_Release"] = None
+        
+        
         # Push tables to BQ for Gold Layer.        
         if df is not None:
             table_name = f"gold_RELEASED_METADATA_TABLE_All_{metadata_type}_{component}"
@@ -387,7 +396,11 @@ def main():
     bronze_prov = client.query(bronze_provenance_query).to_dataframe()
     gold_prov = bronze_prov[bronze_prov['File_EntityId'].isin(current_released_entities['File_EntityId'])]
     gold_prov = pd.merge(gold_prov, bronze_file_schema, on="File_EntityId")
-    
+    idp_extracted_version = gold_prov["Status_Folder_Name"].str.extract(r"v(\d+)_release", expand=False)
+    gold_prov["Data_Release"] = "Release " + idp_extracted_version + ".0"
+    #TEMPORARY ADDITION
+    gold_prov["CRDC_Release"] = None
+
     load_bq(
             client,
             PROJECT,
