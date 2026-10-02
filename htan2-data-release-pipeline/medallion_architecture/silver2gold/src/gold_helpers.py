@@ -56,7 +56,7 @@ def apply_age_masking(df, client, project, dataset, table_id, max_age_days):
         
     silver_tid = table_id.replace("bronze_", "silver_")
     
-    #Query matching AGE_OVER_90, etc.
+    # Query matching AGE_OVER_90, etc.
     age_masking_query = f"""
         SELECT BQ_Hash_Record_ID, Release_Error_Messages 
         FROM `{project}.{dataset}.{silver_tid}` 
@@ -64,7 +64,7 @@ def apply_age_masking(df, client, project, dataset, table_id, max_age_days):
         """
     age_masking_results = client.query(age_masking_query).to_dataframe()
 
-    #Track whether any age column was obfuscated for a given record
+    # Track whether any age column was obfuscated for a given record
     df["AGE_IS_OBFUSCATED"] = False
 
     if not age_masking_results.empty and "BQ_Hash_Record_ID" in age_masking_results.columns:
@@ -83,8 +83,12 @@ def apply_age_masking(df, client, project, dataset, table_id, max_age_days):
 
             if matching_ids:
                 col_mask = df["BQ_Hash_Record_ID"].isin(matching_ids)
+                
+                # Check for string dtype to prevent pyarrow string assignment crash
+                val = str(max_age_days) if pd.api.types.is_string_dtype(df[col]) else max_age_days
+                
                 # Overwrite ONLY the matching column for identified records
-                df.loc[col_mask, col] = max_age_days
+                df.loc[col_mask, col] = val
                 df.loc[col_mask, "AGE_IS_OBFUSCATED"] = True
 
     return df
@@ -96,12 +100,20 @@ def derive_age_in_months(df):
     """
     for col in [c for c in df.columns if "AGE_IN_" in c]:
         new_col = col.replace("AGE_IN_DAYS_", "AGE_IN_MONTHS_APPROXIMATED_")
-    
+        
+        # This duplicates the column, inheriting the same PyArrow string format if it was a string
         df[new_col] = df[col]
-    
+        
         numeric_age = pd.to_numeric(df[col], errors="coerce")
         is_positive = numeric_age > 0
-    
-        df.loc[is_positive, new_col] = ((numeric_age[is_positive] - 1) * 12 / 365).astype(int)
         
+        # Calculate the integer ages
+        calculated_ages = ((numeric_age[is_positive] - 1) * 12 / 365).astype(int)
+        
+        # If the newly duplicated column is PyArrow string format, convert the int ages to string before inserting
+        if pd.api.types.is_string_dtype(df[new_col]):
+            df.loc[is_positive, new_col] = calculated_ages.astype(str)
+        else:
+            df.loc[is_positive, new_col] = calculated_ages
+            
     return df
