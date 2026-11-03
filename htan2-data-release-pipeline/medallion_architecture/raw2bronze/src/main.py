@@ -349,22 +349,9 @@ def main() -> None:
         table_name = f"bronze_METADATA_TABLE_All_Records_{component_safe}"
 
         payload_fields = PAYLOAD_FIELDS_BY_COMPONENT[component]
-        merge_cols = [c for c in payload_fields if c in df.columns and c in record_registry_df.columns]
 
-        # Filter registry to this component to avoid accidental cross-component matches
-        comp_registry = record_registry_df[record_registry_df["Source_Component"] == component] if "Source_Component" in record_registry_df.columns else record_registry_df
-
-        # Cast merge cols to string on copies to prevent dtype merge failures (e.g., int vs object)
-        registry_for_merge = comp_registry.drop_duplicates(subset=merge_cols).copy() if merge_cols else comp_registry.copy()
-        for c in merge_cols:
-            df[c] = df[c].astype(str)
-            registry_for_merge[c] = registry_for_merge[c].astype(str)
-
-        df = df.merge(registry_for_merge[merge_cols + ["BQ_Hash_Record_ID"]], how="left", on=merge_cols)
-        needs_id = df["BQ_Hash_Record_ID"].isna()
-
-        # Mint hashes for unindexed rows
-        df.loc[needs_id, "BQ_Hash_Record_ID"] = df.loc[needs_id].apply(
+        # 1. Mint hash directly for all rows (no merge needed)
+        df["BQ_Hash_Record_ID"] = df.apply(
             lambda row: mint_record_id(
                 row=row.to_dict(),
                 component=component,
@@ -373,12 +360,16 @@ def main() -> None:
             axis=1,
         )
 
-        # Select only hash and payload fields (Record_EntityId cleanly omitted)
+        # 2. Check directly against known hashes in the registry
+        existing_hashes = set(record_registry_df["BQ_Hash_Record_ID"].dropna())
+        is_new = df["BQ_Hash_Record_ID"].notna() & ~df["BQ_Hash_Record_ID"].isin(existing_hashes)
+
+        # 3. Only pull records whose hashes are genuinely not in BigQuery yet
         registry_payload_cols = [c for c in payload_fields if c in df.columns and c != "BQ_Hash_Record_ID"]
         registry_cols = ["BQ_Hash_Record_ID", *registry_payload_cols]
 
         new_registry_rows = (
-            df.loc[needs_id, registry_cols]
+            df.loc[is_new, registry_cols]
             .drop_duplicates(subset=["BQ_Hash_Record_ID"])
             .replace("nan", np.nan)
             .dropna(subset=["BQ_Hash_Record_ID"])
