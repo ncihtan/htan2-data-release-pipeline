@@ -45,10 +45,12 @@ fields_by_component:
     - HTAN_PANEL_ID
     - CHANNEL_NAME
     - CHANNEL_ID
+    - OTHER_TARGET_DESCRIPTION
     - HTAN_Center
     - Component
 
   SpatialPanel:
+    - ENSEMBL_ID
     - HTAN_PANEL_ID
     - TARGET_NAME
     - TARGET_TYPE
