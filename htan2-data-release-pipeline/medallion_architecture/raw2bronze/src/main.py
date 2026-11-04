@@ -7,10 +7,10 @@ Transforms metadata from files into stacked component assay tables with curator 
 
 Requires (env):
 - GOOGLE_CLOUD_PROJECT (defaults to 'htan2-dcc')
-- BQ_DATASET (defaults to 'htan2_synapse_bronze')
+- BQ_DATASET (defaults to 'htan2_medallion_bronze')
 
-Authors: Dar'ya Pozhidayeva, Yamina Katariya
-Updated: 11-02-2026
+Authors: Dar'ya Pozhidayeva
+Updated: 11-04-2026
 """
 
 import os
@@ -76,16 +76,26 @@ def mint_record_id(
     if payload_fields is None:
         raise ValueError(f"No necessary fields defined for component: '{component}'")
 
+    allow_partial = component in ("SpatialPanel", "ChannelMetadata")
     cleaned = []
+
     for field in payload_fields:
         val = row.get(field)
         if val is None or pd.isna(val):
+            if allow_partial:
+                continue
             return None
 
         val = str(val).strip()
         if val == "" or val.lower() == "nan":
+            if allow_partial:
+                continue
             return None
+
         cleaned.append(val)
+
+    if not cleaned:
+        return None
 
     id_segment = "|".join(cleaned)
     payload = f"{namespace}|{version}|{id_segment}".encode("utf-8")
