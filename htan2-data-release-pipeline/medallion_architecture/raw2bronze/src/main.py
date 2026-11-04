@@ -87,13 +87,6 @@ def mint_record_id(
             return None
         cleaned.append(val)
 
-    # Inject row_index for Spatial and Channel records
-    if component in ("SpatialPanel", "ChannelMetadata"):
-        row_idx = row.get("row_index")
-        if row_idx is None or pd.isna(row_idx):
-            return None
-        cleaned.append(str(row_idx).strip())
-
     id_segment = "|".join(cleaned)
     payload = f"{namespace}|{version}|{id_segment}".encode("utf-8")
     digest = hashlib.sha256(payload).digest()
