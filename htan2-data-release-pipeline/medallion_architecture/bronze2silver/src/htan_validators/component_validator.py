@@ -45,6 +45,9 @@ following checks on component-specific metadata tables:
 
         - less than (90 * 365) - 1 days (32849 days, 90 years old)
         - greater than (18 * 365) - 1 days (16569 days, 18 years old) unless it is confirmed they are Pediatric patients
+    
+    8. **Released Entities:** Ensures newly submitted HTAN DATA FILE IDs were not already
+    used in previous releases.
 """
 import re
 import pandas as pd
@@ -240,6 +243,46 @@ class HTANComponentValidator(BaseValidator):
                     error_type="DUPLICATE_HTAN_ID",
                     message=f"{col} is duplicated."
                 )
+
+        return df
+
+    def check_released_data_file_ids(self, client, df):
+        """
+        Checks that HTAN_DATA_FILE_ID values have not already been used in
+        previous releases.
+
+        Args:
+            client:
+                BigQuery client.
+
+            df (pandas.DataFrame):
+                Component-level metadata table.
+
+        Returns:
+            df (pandas.DataFrame):
+                Component-level metadata table.
+        """
+
+        gold_prov_name = "htan2-dcc.htan2_medallion_gold.gold_RELEASED_INDEXING_TABLE_All_Files_and_Records_ID_Provenance"
+        file_id = "HTAN_DATA_FILE_ID"
+
+        # Get released HTAN_DATA_FILE_IDs
+        query = f"""
+            SELECT DISTINCT {file_id}
+            FROM `{gold_prov_name}`
+        """
+        released_ids = client.query(query).to_dataframe()
+
+        # Identify current submission IDs that have been used in previous releases
+        invalid_mask = df[file_id].notna() & df[file_id].isin(released_ids[file_id])
+        for idx in df[invalid_mask].index:
+            print("hi")
+            self.append_error(
+                df,
+                idx,
+                error_type="DUPLICATE_HTAN_ID",
+                message=f"{file_id} {df.loc[idx, file_id]} is already released."
+            )
 
         return df
 
@@ -606,7 +649,7 @@ class HTANComponentValidator(BaseValidator):
                 Component-level metadata table.
         """
         # Initialize error columns
-        df = self.initialize_columns(df)
+        df = self.initialize_columns(df, metadata_type)
 
         #######################
         # Validation Checks
@@ -617,8 +660,11 @@ class HTANComponentValidator(BaseValidator):
             # Null and duplicate checks (#1)
             df = self.check_nulls_and_duplicates(df, metadata_type, component)
 
-            # Check Synapse ID entity status (#2)
             if metadata_type == "Files":
+                # Check Released File IDs (#8)
+                df = self.check_released_data_file_ids(client, df)
+
+                # Check Synapse ID entity status (#2)
                 df = self.check_synapse_id(syn, df, "File_EntityId")
             elif metadata_type == "Records":
                 df = self.check_synapse_id(syn, df, "Folder_EntityId")

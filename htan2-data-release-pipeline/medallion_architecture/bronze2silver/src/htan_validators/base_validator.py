@@ -19,6 +19,8 @@ and provides the following core utilities:
         - Release_Validation_Timestamp (datetime): Time when data was evaluated.
         - Release_Violations (list): List containing general error categories.
         - Release_Error_Messages (list[dict]): List of detailed error messages, where messages are formatted as dictionaries.
+        - Release_Status (str): Indicates record set rows that were previously released.
+        - Release_Status_Info (str): Release details for previously released record set rows.
 """
 
 import ast
@@ -31,7 +33,7 @@ class BaseValidator:
     and general helper functions.
     """
 
-    def initialize_columns(self, df):
+    def initialize_columns(self, df, metadata_type = None):
         """
         Ensure all Release_* columns exist in the metadata tables for
         standardized error reporting.
@@ -40,10 +42,15 @@ class BaseValidator:
             df (pandas.Dataframe):
                 Component-level metadata table.
 
+            metadata_type (str):
+                Synapse structure annotation type (Files or Records).
+
         Returns:
             df (pandas.Dataframe):
                 Component-level metadata table.
         """
+
+        # Add to all SILVER metadata table results
         if "Release_Validation_Passed" not in df.columns:
             df["Release_Validation_Passed"] = True
 
@@ -55,6 +62,16 @@ class BaseValidator:
 
         if "Release_Error_Messages" not in df.columns:
             df["Release_Error_Messages"] = None
+
+        # Add to only RECORD SET metadata tables
+        if metadata_type == "Records":
+
+            if "Release_Status" not in df.columns:
+                df["Release_Status"] = None
+
+            if "Release_Status_Info" not in df.columns:
+                df["Release_Status_Info"] = None
+
 
         return df
 

@@ -468,7 +468,7 @@ class HTANProvenanceValidator(BaseValidator):
         """
 
         # Initialize error columns
-        df = self.initialize_columns(df)
+        df = self.initialize_columns(df, metadata_type)
         id_prov = self.initialize_columns(id_prov)
 
         # Query the associated metadata tables (demographics, channel, and panel)

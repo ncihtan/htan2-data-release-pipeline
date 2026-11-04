@@ -28,6 +28,7 @@ Modified By:  Yamina Katariya <ykatariy@systemsbiology.org>
 """
 from datetime import datetime
 import pandas as pd
+import numpy as np
 from htan_validators.component_validator import HTANComponentValidator
 from htan_validators.provenance_validator import HTANProvenanceValidator
 from client_load import (
@@ -44,7 +45,7 @@ PROJECT = "htan2-dcc"
 RAW_DATASET = "htan2_synapse_raw"
 BRONZE_DATASET = "htan2_medallion_bronze"
 SILVER_DATASET = "htan2_medallion_silver"
-GOLD_ARCHIVE_DATASET = "htan2_medallion_gold_release_archive"
+GOLD_DATASET = "htan2_medallion_gold"
 
 #####################################################
 #                 HELPER FUNCTIONS
@@ -249,14 +250,6 @@ def main():
     """
     record_schemas = client.query(record_schema_query).to_dataframe()
 
-    # Filter out record rows for data that has already been released
-    # - wildcard should support future tables provided they have the same schema.
-    gold_archive_record_query = f"""
-    SELECT *
-    FROM `{PROJECT}.{GOLD_ARCHIVE_DATASET}.gold_RELEASED_INDEXING_TABLE_Released_RecordsetRows_R*`
-    """
-    released_records = client.query(gold_archive_record_query).to_dataframe()
-
     # Get all BRONZE layer metadata tables
     bronze_tables = list(client.list_tables(f"{PROJECT}.{BRONZE_DATASET}"))
     bronze_metadata = [
@@ -289,17 +282,15 @@ def main():
                           on=['Record_EntityId', 'Folder_EntityId', 'Component', 'HTAN_Center'],
                           how='left')
 
-            df = df[~df['BQ_Hash_Record_ID'].isin(released_records['BQ_Hash_Record_ID'])]
-
         df = rename_curator_val_results(df, metadata_type)
 
         print(f"\nValidating {component}")
 
-        # Begin component validation
+        # Begin COMPONENT validation
         comp_validator = HTANComponentValidator()
         df = comp_validator.validate(df, syn, client, metadata_type, component, exclusion_list)
 
-        # Begin provenance validation
+        # Begin PROVENANCE validation
         prov_validator = HTANProvenanceValidator()
         df, prov_error_table = prov_validator.validate(client,
                                                        df,
@@ -308,7 +299,53 @@ def main():
                                                        metadata_type,
                                                        component)
 
-        # Push component validation results to BQ
+        # Flag released rows in record sets
+        if metadata_type == "Records":
+            gold_equiv_table = f"""
+                SELECT BQ_Hash_Record_ID, Schema_Version, Data_Release
+                FROM `{PROJECT}.{GOLD_DATASET}.gold_RELEASED_METADATA_TABLE_All_Records_{component}`
+                QUALIFY ROW_NUMBER() OVER (
+                    PARTITION BY BQ_Hash_Record_ID
+                    ORDER BY CAST(REGEXP_EXTRACT(Data_Release, r'([0-9.]+)') AS FLOAT64) ASC
+                ) = 1
+            """
+            gold_df = client.query(gold_equiv_table).to_dataframe()
+
+            # Match records against the released gold table
+            df = df.merge(
+                gold_df,
+                on="BQ_Hash_Record_ID",
+                how="left",
+                indicator="_release_match",
+                validate="many_to_one"
+            )
+
+            # Assign release status
+            released_mask = df["_release_match"] == "both"
+            df["Release_Status"] = np.where(
+                released_mask,
+                "RELEASED",
+                "UNRELEASED"
+            )
+
+            # Populate release information for previously released records
+            df["Release_Status_Info"] = pd.Series(
+                pd.NA, index=df.index, dtype="string"
+            )
+            df.loc[released_mask, "Release_Status_Info"] = (
+                df.loc[released_mask, "Data_Release"].astype(str)
+                + "; Schema Version " + df.loc[released_mask, "Schema_Version"].astype(str)
+            )
+
+            # Remove temporary merge columns
+            df = df.drop(columns=[
+                "_release_match",
+                "Data_Release",
+                "Schema_Version"
+            ])
+
+
+        # Record validation results as a dictionary
         table_id = table_id.replace("bronze_", "silver_", 1)
         validation_tables[table_id] = df
 
@@ -396,6 +433,8 @@ def main():
                     "Curator_Error_Messages": row["Curator_Error_Messages"],
                     "Release_Violations": row["Release_Violations"],
                     "Release_Error_Messages": row["Release_Error_Messages"],
+                    "Release_Status": row["Release_Status"],
+                    "Release_Status_Info": row["Release_Status_Info"],
                     "Curator_Validation_Passed": curator_passed,
                     "Component_Validation_Passed": component_passed,
                     "Provenance_Validation_Passed": provenance_passed,
