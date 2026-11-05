@@ -276,7 +276,6 @@ class HTANComponentValidator(BaseValidator):
         # Identify current submission IDs that have been used in previous releases
         invalid_mask = df[file_id].notna() & df[file_id].isin(released_ids[file_id])
         for idx in df[invalid_mask].index:
-            print("hi")
             self.append_error(
                 df,
                 idx,
