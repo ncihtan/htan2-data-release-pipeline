@@ -344,7 +344,6 @@ def main():
                 "Schema_Version"
             ])
 
-
         # Record validation results as a dictionary
         table_id = table_id.replace("bronze_", "silver_", 1)
         validation_tables[table_id] = df
