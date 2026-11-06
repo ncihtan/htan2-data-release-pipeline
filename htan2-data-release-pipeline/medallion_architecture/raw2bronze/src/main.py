@@ -10,7 +10,7 @@ Requires (env):
 - BQ_DATASET (defaults to 'htan2_medallion_bronze')
 
 Authors: Dar'ya Pozhidayeva
-Updated: 11-04-2026
+Updated: 11-06-2026
 """
 
 import os
@@ -23,6 +23,7 @@ import yaml
 import numpy as np
 import pandas as pd
 from google.cloud import bigquery
+from synapseclient.models import RecordSet
 
 from client_load import (
     load_bq,
@@ -37,7 +38,6 @@ MEDALLION_LAYER = os.getenv("BQ_DATASET", "htan2_medallion_bronze")
 # Logging
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 log = logging.getLogger(__name__)
-
 
 # --------------------------------------------------------------------------------------
 # Helper Functions
@@ -293,20 +293,19 @@ def main() -> None:
             version = None
 
         try:
-            rs_meta = syn.get(record_view_id, version=version, downloadFile=False)
-            file_handle_id = rs_meta.dataFileHandleId
-            validation_fh_id = getattr(rs_meta, "validationFileHandleId", None)
+            rs_kwargs = {"id": record_view_id, "download_file": True}
+            if version is not None:
+                rs_kwargs["version_number"] = version
 
-            download_info = syn._getFileHandleDownload(
-                fileHandleId=file_handle_id,
-                objectId=record_view_id,
-                objectType="FileEntity",
+            record_set = RecordSet(**rs_kwargs).get()
+
+            data_df = (
+                pd.read_csv(record_set.path)
+                .dropna(how="all")
+                .reset_index(drop=True)
             )
-            download_url = download_info.get("preSignedURL")
-            if not download_url:
-                raise ValueError("Could not retrieve a valid records data download URL from Synapse.")
 
-            data_df = pd.read_csv(download_url).dropna(how="all").reset_index(drop=True)
+            validation_fh_id = getattr(record_set, "validation_file_handle_id", None)
 
             if not validation_fh_id:
                 print(f"RecordSet {record_view_id_raw} has no validationFileHandleId")
@@ -316,17 +315,21 @@ def main() -> None:
                 validation_df["All_Validation_Messages"] = "Files are missing validationFileHandleId"
                 validation_df = validation_df.reset_index().rename(columns={"index": "row_index"})
             else:
-                validation_info = syn._getFileHandleDownload(
-                    fileHandleId=validation_fh_id,
-                    objectId=record_view_id,
-                    objectType="FileEntity",
-                )
-                validation_path = validation_info["preSignedURL"]
-                validation_df = pd.read_csv(validation_path).rename(columns={
-                    "is_valid": "Validation_Passed",
-                    "validation_error_message": "Validation_Error_Message",
-                    "all_validation_messages": "All_Validation_Messages",
-                })
+                validation_df = record_set.get_detailed_validation_results()
+                if validation_df is not None:
+                    validation_df = validation_df.rename(columns={
+                        "is_valid": "Validation_Passed",
+                        "validation_error_message": "Validation_Error_Message",
+                        "all_validation_messages": "All_Validation_Messages",
+                    })
+                    if "row_index" not in validation_df.columns:
+                        validation_df = validation_df.reset_index().rename(columns={"index": "row_index"})
+                else:
+                    validation_df = pd.DataFrame(index=data_df.index)
+                    validation_df["Validation_Passed"] = "False"
+                    validation_df["Validation_Error_Message"] = "Files were not validated using the Curator"
+                    validation_df["All_Validation_Messages"] = "Validation results returned None"
+                    validation_df = validation_df.reset_index().rename(columns={"index": "row_index"})
 
             data_df = data_df.reset_index().rename(columns={"index": "row_index"})
             merged_df = data_df.merge(validation_df, on="row_index", how="left")
@@ -353,7 +356,7 @@ def main() -> None:
 
         payload_fields = PAYLOAD_FIELDS_BY_COMPONENT[component]
 
-        # 1. Mint hash directly for all rows (no merge needed)
+        # 1. Mint hash for all rows
         df["BQ_Hash_Record_ID"] = df.apply(
             lambda row: mint_record_id(
                 row=row.to_dict(),
@@ -367,7 +370,7 @@ def main() -> None:
         existing_hashes = set(record_registry_df["BQ_Hash_Record_ID"].dropna())
         is_new = df["BQ_Hash_Record_ID"].notna() & ~df["BQ_Hash_Record_ID"].isin(existing_hashes)
 
-        # 3. Only pull records whose hashes are genuinely not in BigQuery yet
+        # 3. Only pull records whose hashes are not found in BQ
         registry_payload_cols = [c for c in payload_fields if c in df.columns and c != "BQ_Hash_Record_ID"]
         registry_cols = ["BQ_Hash_Record_ID", *registry_payload_cols]
 
