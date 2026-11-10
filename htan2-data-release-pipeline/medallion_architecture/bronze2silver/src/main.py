@@ -36,6 +36,7 @@ from client_load import (
     init_bq_client,
     init_synapse_client
 )
+from release_diff import compare_released_rows
 
 #####################################################
 #             SETTING GLOBAL VARIABLES
@@ -263,6 +264,9 @@ def main():
     #   - Value: Metadata table with appended errors
     validation_tables = {}
 
+    # Initialize dataframe containing released rows comparison
+    all_diff_stats = pd.DataFrame()
+
     for table_id in bronze_metadata:
 
         # Initialize the kind of metadata being checked and the component
@@ -299,21 +303,35 @@ def main():
                                                        metadata_type,
                                                        component)
 
-        # Flag released rows in record sets
+        ############################
+        # Released Record Rows Eval
+        ############################
         if metadata_type == "Records":
-            gold_equiv_table = f"""
-                SELECT BQ_Hash_Record_ID, Schema_Version, Data_Release
+
+            # Query gold table and rank releases
+            gold_query = f"""
+                SELECT
+                    *,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY BQ_Hash_Record_ID
+                        ORDER BY CAST(REGEXP_EXTRACT(Data_Release, r'([0-9.]+)') AS FLOAT64) ASC
+                    ) AS release_rank
                 FROM `{PROJECT}.{GOLD_DATASET}.gold_RELEASED_METADATA_TABLE_All_Records_{component}`
-                QUALIFY ROW_NUMBER() OVER (
-                    PARTITION BY BQ_Hash_Record_ID
-                    ORDER BY CAST(REGEXP_EXTRACT(Data_Release, r'([0-9.]+)') AS FLOAT64) ASC
-                ) = 1
             """
-            gold_df = client.query(gold_equiv_table).to_dataframe()
+            gold_df = client.query(gold_query).to_dataframe()
+
+            gold_filtered_df = (
+                gold_df[gold_df['release_rank'] == 1]
+                [['BQ_Hash_Record_ID', 'Schema_Version', 'Data_Release']]
+                .drop(columns=[], errors='ignore')
+                .copy()
+            )
+
+            gold_df = gold_df.drop(columns=['release_rank'])
 
             # Match records against the released gold table
             df = df.merge(
-                gold_df,
+                gold_filtered_df,
                 on="BQ_Hash_Record_ID",
                 how="left",
                 indicator="_release_match",
@@ -344,6 +362,13 @@ def main():
                 "Schema_Version"
             ])
 
+            # Evaluate difference between released rows and the rows in silver
+            diff_stats_df = compare_released_rows(df, gold_df, component, latest_folder)
+            all_diff_stats = pd.concat(
+                [all_diff_stats, diff_stats_df],
+                ignore_index=True
+            )
+
         # Record validation results as a dictionary
         table_id = table_id.replace("bronze_", "silver_", 1)
         validation_tables[table_id] = df
@@ -353,6 +378,13 @@ def main():
     ##########################
 
     print_sub_section("GENERATING ERROR TABLES")
+
+    # Load released record set comparison table to BQ
+    load_bq(client,
+            PROJECT,
+            SILVER_DATASET,
+            "silver_INDEXING_TABLE_Released_Record_Set_Comparison",
+            all_diff_stats)
 
     # Group error types
     component_errors = ["INVALID_HTAN_ID",
