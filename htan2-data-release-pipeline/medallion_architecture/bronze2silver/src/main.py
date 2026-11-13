@@ -636,7 +636,7 @@ def main():
         ][['HTAN_BIOSPECIMEN_ID']].drop_duplicates()
 
         bypass_part = bypass_records[
-            bypass_records['Component'].isin(['Demographics', 'Diagnosis', 'Participant']) &
+            bypass_records['Component'].isin(['Demographics', 'Diagnosis', 'Therapy', 'VitalStatus', 'Exposure', 'FamilyHistory', 'FollowUp', 'MolecularTest']) &
             bypass_records['HTAN_PARTICIPANT_ID'].notna()
         ][['HTAN_PARTICIPANT_ID']].drop_duplicates()
         
@@ -652,7 +652,7 @@ def main():
         )
 
         part_matches = (
-            record_error_table['Component'].isin(['Demographics', 'Diagnosis', 'Participant']) &
+            record_error_table['Component'].isin(['Demographics', 'Diagnosis', 'Therapy', 'VitalStatus', 'Exposure', 'FamilyHistory', 'FollowUp', 'MolecularTest']) &
             record_error_table['HTAN_PARTICIPANT_ID'].isin(bypass_part['HTAN_PARTICIPANT_ID'])
         )
         
