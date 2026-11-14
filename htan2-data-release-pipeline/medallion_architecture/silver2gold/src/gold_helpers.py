@@ -4,7 +4,6 @@
 Gold layer helper functions.
 """
 import re
-import numpy as np
 import pandas as pd
 from google.cloud.exceptions import NotFound
 
@@ -49,7 +48,6 @@ def fetch_table(
     silver_dataset: str,
     gold_dataset: str,
     table_id: str,
-    dm_dataset: str | None = None,
 ) -> pd.DataFrame:
     """Resolves the dataset from table_id prefix using the provided dataset variables."""
     prefix = table_id.split("_", 1)[0].lower()
@@ -62,8 +60,6 @@ def fetch_table(
         dataset = silver_dataset
     elif prefix == "gold":
         dataset = gold_dataset
-    elif prefix == "dm" and dm_dataset is not None:
-        dataset = dm_dataset
     else:
         raise ValueError(f"Unknown or unconfigured dataset prefix '{prefix}' in table_id: '{table_id}'")
 
@@ -127,7 +123,7 @@ def derive_age_in_months(df: pd.DataFrame) -> pd.DataFrame:
     Add derived variables for age in months.
     https://docs.google.com/document/d/1Zs3vpMUxcbpbggOkxKkXzaFQvcuCZalwn0uv2ruUeQQ/edit?tab=t.0
     """
-    for col in [c for c in df.columns if "AGE_IN_" in c]:
+    for col in [c for c in df.columns if "AGE_IN_DAYS_" in c]:
         new_col = col.replace("AGE_IN_DAYS_", "AGE_IN_MONTHS_APPROXIMATED_")
 
         # Duplicates the column, inheriting the same PyArrow string format if it was a string

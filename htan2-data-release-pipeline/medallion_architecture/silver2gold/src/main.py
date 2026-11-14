@@ -80,8 +80,7 @@ def main():
         BRONZE_DATASET,
         SILVER_DATASET,
         GOLD_DATASET,
-        table_id,
-        dm_dataset=DM_DATASET,)
+        table_id)
     for table_id in TABLE_IDS}
     
     print_sub_section("PROCESS AND FILTER TABLES AFTER PULLING")
