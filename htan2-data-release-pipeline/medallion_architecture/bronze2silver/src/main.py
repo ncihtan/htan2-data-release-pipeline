@@ -23,7 +23,7 @@ Functions:
 
 Author:       Yamina Katariya <ykatariy@systemsbiology.org>
 Date Created: 04-01-2026
-Date Updated: 09-16-2026
+Date Updated: 11-12-2026
 Modified By:  Yamina Katariya <ykatariy@systemsbiology.org>
 """
 from datetime import datetime
@@ -629,90 +629,114 @@ def main():
     # ----- RECORDS ------
     if not record_error_table.empty:
 
-        # Filter on Record rows that pass validation by
-        # matching on the following IDs OR are on the bypass list:
-        match_cols = [
-            'Record_EntityId', 
-            'HTAN_PARTICIPANT_ID', 
-            'HTAN_BIOSPECIMEN_ID', 
-            'HTAN_PANEL_ID',
-            'Folder_EntityId']
+        #Create component-specific subset tables from bypass_records
+        bypass_bio = bypass_records[
+            (bypass_records['Component'] == 'Biospecimen') &
+            bypass_records['HTAN_BIOSPECIMEN_ID'].notna()
+        ][['HTAN_BIOSPECIMEN_ID']].drop_duplicates()
 
-        bypass_temp = bypass_records[match_cols].drop_duplicates()
-        bypass_temp['is_bypass'] = True
+        bypass_part = bypass_records[
+            bypass_records['Component'].isin(['Demographics', 'Diagnosis', 'Therapy', 'VitalStatus', 'Exposure', 'FamilyHistory', 'FollowUp', 'MolecularTest']) &
+            bypass_records['HTAN_PARTICIPANT_ID'].notna()
+        ][['HTAN_PARTICIPANT_ID']].drop_duplicates()
+        
+        bypass_panel = bypass_records[
+            bypass_records['Component'].isin(['SpatialPanel', 'ChannelMetadata']) &
+            bypass_records['HTAN_PANEL_ID'].notna()
+        ][['HTAN_PANEL_ID']].drop_duplicates()
 
-        record_bypassed = record_error_table.merge(
-            bypass_temp, 
-            on=match_cols,
-            how='left')
+        #Identify rows that need to be bypassed in record_error_table
+        bio_matches = (
+            (record_error_table['Component'] == 'Biospecimen') &
+            record_error_table['HTAN_BIOSPECIMEN_ID'].isin(bypass_bio['HTAN_BIOSPECIMEN_ID'])
+        )
 
-        validation_passed_records = record_bypassed[
-            (record_bypassed['Validation_Completion'] == '3/3') |
-            (record_bypassed['is_bypass'] is True)
-            ].drop(columns=['is_bypass'])
+        part_matches = (
+            record_error_table['Component'].isin(['Demographics', 'Diagnosis', 'Therapy', 'VitalStatus', 'Exposure', 'FamilyHistory', 'FollowUp', 'MolecularTest']) &
+            record_error_table['HTAN_PARTICIPANT_ID'].isin(bypass_part['HTAN_PARTICIPANT_ID'])
+        )
+        
+        panel_matches = (
+            record_error_table['Component'].isin(['SpatialPanel', 'ChannelMetadata']) &
+            record_error_table['HTAN_PANEL_ID'].isin(bypass_panel['HTAN_PANEL_ID'])
+        )
 
+        #Change the status directly: force validation completion to '3/3' for bypassed items
+        needs_bypass = bio_matches | part_matches | panel_matches
+        record_error_table.loc[needs_bypass, 'Validation_Completion'] = '3/3'
+
+        #Validation_passed_records now contains original 3/3s PLUS the bypassed rows
+        validation_passed_records = record_error_table[
+            record_error_table['Validation_Completion'] == '3/3'
+        ].copy()
+
+        #Filter downstream silver metadata tables
         collected_dfs = []
         silver_tables = list(client.list_tables(f"{PROJECT}.{SILVER_DATASET}"))
 
-        silver_metadata = [table.table_id
+        silver_metadata = [
+            table.table_id
             for table in silver_tables
-            if table.table_id.startswith("silver_METADATA_TABLE_All_Records")]
+            if table.table_id.startswith("silver_METADATA_TABLE_All_Records")
+        ]
+
+        valid_record_entity_ids = set(validation_passed_records['Record_EntityId'].dropna().unique())
+        valid_bq_hash_ids = set(validation_passed_records['BQ_Hash_Record_ID'].dropna().unique())
 
         for table_id in silver_metadata:
             metadata_type = table_id.split("_")[4]
-            component = table_id.split("_")[5]
 
             df = query_bigquery_table(client, PROJECT, SILVER_DATASET, latest_folder, table_id)
-            df = df[df['Record_EntityId'].isin(validation_passed_records['Record_EntityId'])]
+            if not df.empty:
+                df = df[
+                    df['Record_EntityId'].isin(valid_record_entity_ids) &
+                    df['BQ_Hash_Record_ID'].isin(valid_bq_hash_ids)
+                ].copy()
 
-            # Match on BQ_Hash_ID
-            df = df[df['BQ_Hash_Record_ID'].isin(validation_passed_records['BQ_Hash_Record_ID'])]
-            df['RecordSet_Row_Index'] = df.index
-            collected_dfs.append(df)
+                if not df.empty:
+                    df['RecordSet_Row_Index'] = df.index
+                    collected_dfs.append(df)
 
-        # List of necessary columns
-        necessary_columns = ['Component',
-                             'Record_EntityId',
-                             'RecordSet_Row_Index',
-                             'Folder_EntityId',
-                             'HTAN_PARTICIPANT_ID',
-                             'HTAN_BIOSPECIMEN_ID',
-                             'HTAN_PANEL_ID' ,
-                             'HTAN_Center',
-                             'Status_Folder_Name',
-                             'BQ_Hash_Record_ID']
+        #List of necessary columns
+        necessary_columns = [
+            'Component',
+            'Record_EntityId',
+            'RecordSet_Row_Index',
+            'Folder_EntityId',
+            'HTAN_PARTICIPANT_ID',
+            'HTAN_BIOSPECIMEN_ID',
+            'HTAN_PANEL_ID',
+            'HTAN_Center',
+            'Status_Folder_Name',
+            'BQ_Hash_Record_ID']
 
-        # Combine everything into a single DataFrame outside the loop
         if collected_dfs:
-
-            # Subset to only the necessary columns (fills missing ones with null/NaN)
             combined_df = pd.concat(collected_dfs, ignore_index=True)
             validation_passed_records = combined_df.reindex(columns=necessary_columns)
         else:
-
-            # Fallback if no tables returned data, initialized with your target columns
             validation_passed_records = pd.DataFrame(columns=necessary_columns)
 
         load_bq(
-                client,
-                PROJECT,
-                SILVER_DATASET,
-                "silver_INDEXING_TABLE_All_Records_Passed_Validation",
-                validation_passed_records
-            )
+            client,
+            PROJECT,
+            SILVER_DATASET,
+            "silver_INDEXING_TABLE_All_Records_Passed_Validation",
+            validation_passed_records
+        )
 
         summary_count_records = validation_passed_records.groupby(
             ['Component',
              'HTAN_Center',
-             'Status_Folder_Name']).size().reset_index(name='Number_Unique_Elements')
+             'Status_Folder_Name']
+        ).size().reset_index(name='Number_Unique_Elements')
 
         load_bq(
-                client,
-                PROJECT,
-                SILVER_DATASET,
-                "silver_INDEXING_TABLE_All_Records_Passed_Validation_Counts",
-                summary_count_records
-            )
+            client,
+            PROJECT,
+            SILVER_DATASET,
+            "silver_INDEXING_TABLE_All_Records_Passed_Validation_Counts",
+            summary_count_records
+        )
 
 if __name__ == "__main__":
     main()
